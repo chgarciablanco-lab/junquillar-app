@@ -14,13 +14,13 @@
       </div>
 
       <nav class="sidebar-nav">
-        <button class="nav-btn active">Inicio</button>
-        <button class="nav-btn">Costos</button>
-        <button class="nav-btn">Compras</button>
-        <button class="nav-btn">Documentos</button>
-        <button class="nav-btn">Caja</button>
-        <button class="nav-btn">Balance</button>
-        <button class="nav-btn">Reportes</button>
+        <button class="nav-btn active" data-view="inicio">Inicio</button>
+        <button class="nav-btn" data-view="costos">Costos</button>
+        <button class="nav-btn" data-view="compras">Compras</button>
+        <button class="nav-btn" data-view="documentos">Documentos</button>
+        <button class="nav-btn" data-view="caja">Caja</button>
+        <button class="nav-btn" data-view="balance">Balance</button>
+        <button class="nav-btn" data-view="reportes">Reportes</button>
       </nav>
 
       <div class="sidebar-card">
@@ -35,8 +35,8 @@
     <main class="main">
       <header class="header">
         <div class="header-left">
-          <h1>Dashboard Junquillar</h1>
-          <p>Resumen general del proyecto</p>
+          <h1 id="page-title">Dashboard Junquillar</h1>
+          <p id="page-subtitle">Resumen general del proyecto</p>
         </div>
 
         <div class="header-right">
@@ -59,9 +59,9 @@
       </header>
 
       <div class="content">
-        <section class="kpi-grid" id="kpi-grid"></section>
+        <section class="kpi-grid module-block" id="section-kpis"></section>
 
-        <section class="charts-row">
+        <section class="charts-row module-block" id="section-charts">
           <div class="card">
             <div class="card-title">Presupuesto vs costo real</div>
             <div class="card-sub">Seguimiento mensual del proyecto</div>
@@ -78,7 +78,7 @@
           </div>
         </section>
 
-        <section class="docs-row">
+        <section class="docs-row module-block" id="section-docs">
           <div class="card">
             <div class="card-title">Documentos recientes</div>
             <div class="card-sub">Ingreso y control documental de obra</div>
@@ -100,7 +100,7 @@
           </div>
         </section>
 
-        <section class="bottom-grid" id="bottom-grid"></section>
+        <section class="bottom-grid module-block" id="section-bottom"></section>
       </div>
     </main>
   </div>
