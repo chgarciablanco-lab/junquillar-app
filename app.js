@@ -63,38 +63,16 @@ const alerts = [
 ];
 
 const docs = [
-  {
-    name: "Construmart Talca",
-    type: "Factura",
-    amount: "$1.840.000",
-    status: "Pendiente de clasificación",
-    cls: "s-red",
-    date: "14 Abr"
-  },
-  {
-    name: "Arquitectura Proyecto",
-    type: "Factura",
-    amount: "$2.200.000",
-    status: "Ingresada",
-    cls: "s-green",
-    date: "13 Abr"
-  },
-  {
-    name: "Maderas del Maule",
-    type: "Boleta",
-    amount: "$386.500",
-    status: "Pendiente de respaldo",
-    cls: "s-sky",
-    date: "12 Abr"
-  },
-  {
-    name: "Ferretería Sur",
-    type: "Factura",
-    amount: "$924.000",
-    status: "Por aprobar",
-    cls: "s-amber",
-    date: "11 Abr"
-  }
+  { date: "16/04/2026", name: "Almuerzo con cliente",  cat: "Alimentación", catCls: "cat-alimentacion", amount: "$ 25.000",  pago: "Efectivo" },
+  { date: "15/04/2026", name: "Combustible",           cat: "Transporte",   catCls: "cat-transporte",   amount: "$ 40.000",  pago: "Tarjeta"  },
+  { date: "14/04/2026", name: "Material de oficina",   cat: "Oficina",      catCls: "cat-oficina",      amount: "$ 18.500",  pago: "Tarjeta"  },
+  { date: "13/04/2026", name: "Estacionamiento",       cat: "Transporte",   catCls: "cat-transporte",   amount: "$ 5.000",   pago: "Efectivo" },
+  { date: "12/04/2026", name: "Café reunión",          cat: "Alimentación", catCls: "cat-alimentacion", amount: "$ 4.500",   pago: "Efectivo" },
+  { date: "11/04/2026", name: "Pasajes",               cat: "Transporte",   catCls: "cat-transporte",   amount: "$ 32.000",  pago: "Tarjeta"  },
+  { date: "10/04/2026", name: "Útiles de aseo",        cat: "Hogar",        catCls: "cat-hogar",        amount: "$ 12.300",  pago: "Efectivo" },
+  { date: "09/04/2026", name: "Internet oficina",      cat: "Servicios",    catCls: "cat-servicios",    amount: "$ 29.900",  pago: "Tarjeta"  },
+  { date: "08/04/2026", name: "Almuerzo equipo",       cat: "Alimentación", catCls: "cat-alimentacion", amount: "$ 27.800",  pago: "Efectivo" },
+  { date: "07/04/2026", name: "Papelería",             cat: "Oficina",      catCls: "cat-oficina",      amount: "$ 7.600",   pago: "Efectivo" }
 ];
 
 const categories = [
@@ -226,18 +204,17 @@ function renderDocs() {
   if (!el) return;
 
   el.innerHTML = docs.map((doc) => `
-    <div class="table-row">
-      <div>
-        <div class="doc-name">${doc.name}</div>
-      </div>
-      <div>
-        <div>${doc.type}</div>
-        <div class="doc-amount">${doc.amount}</div>
-      </div>
-      <div>
-        <span class="status ${doc.cls}">${doc.status}</span>
-      </div>
+    <div class="table-row gastos-row">
       <div class="doc-date">${doc.date}</div>
+      <div class="doc-name">${doc.name}</div>
+      <div><span class="cat-badge ${doc.catCls}">${doc.cat}</span></div>
+      <div class="doc-amount">${doc.amount}</div>
+      <div>${doc.pago}</div>
+      <div><span class="doc-icon">📄</span></div>
+      <div class="doc-actions">
+        <button class="action-btn edit" title="Editar">✏️</button>
+        <button class="action-btn del" title="Eliminar">🗑️</button>
+      </div>
     </div>
   `).join("");
 }
