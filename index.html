@@ -7,7 +7,104 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div id="app"></div>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="wordmark">Junqo.</div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-btn active">Inicio</button>
+        <button class="nav-btn">Costos</button>
+        <button class="nav-btn">Compras</button>
+        <button class="nav-btn">Documentos</button>
+        <button class="nav-btn">Caja</button>
+        <button class="nav-btn">Balance</button>
+        <button class="nav-btn">Reportes</button>
+      </nav>
+
+      <div class="sidebar-card">
+        <div class="label">Avance general</div>
+        <div class="big">68%</div>
+        <div class="sub">Obra y documentación del proyecto</div>
+        <div class="progress-track"><div class="progress-fill" style="width:68%"></div></div>
+        <button>Ver hitos</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="header">
+        <div class="header-left">
+          <h1>Dashboard Junquillar</h1>
+          <p>Resumen general del proyecto</p>
+        </div>
+
+        <div class="header-right">
+          <div class="search-wrap">
+            <input type="text" placeholder="Buscar proveedor, documento o partida" />
+          </div>
+          <button class="btn-outline">Abril 2026</button>
+          <button class="bell-btn" aria-label="Notificaciones">
+            <span class="bell-dot"></span>
+            🔔
+          </button>
+          <div class="user-chip">
+            <div class="avatar">CB</div>
+            <div>
+              <div class="name">Christian</div>
+              <div class="role">Administrador del proyecto</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="content">
+        <section class="kpi-grid" id="kpi-grid"></section>
+
+        <section class="charts-row">
+          <div class="card">
+            <div class="card-title">Presupuesto vs costo real</div>
+            <div class="card-sub">Seguimiento mensual del proyecto</div>
+            <div class="chart-area">
+              <div class="chart-bars" id="chart-bars"></div>
+              <div class="chart-labels" id="chart-labels"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Alertas críticas</div>
+            <div class="card-sub">Lo que no conviene dejar pasar</div>
+            <div id="alerts-list"></div>
+          </div>
+        </section>
+
+        <section class="docs-row">
+          <div class="card">
+            <div class="card-title">Documentos recientes</div>
+            <div class="card-sub">Ingreso y control documental de obra</div>
+            <div class="table-wrap">
+              <div class="table-head">
+                <div>Proveedor</div>
+                <div>Tipo / monto</div>
+                <div>Estado</div>
+                <div>Fecha</div>
+              </div>
+              <div id="docs-table"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Costo por categoría</div>
+            <div class="card-sub">Distribución actual del proyecto</div>
+            <div style="margin-top:18px" id="categories-list"></div>
+          </div>
+        </section>
+
+        <section class="bottom-grid" id="bottom-grid"></section>
+      </div>
+    </main>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
