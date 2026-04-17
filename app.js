@@ -1,10 +1,16 @@
+/* ============================================================
+   JUNQO DASHBOARD – app.js
+   ============================================================ */
+
+/* ── DATA ─────────────────────────────────────────────────── */
+
 const kpis = [
   {
     title: "Presupuesto construcción",
     value: "$180.000.000",
     delta: "↓ -2,1%",
     type: "down",
-    footer: "Meta estimada de obra"
+    footer: "Meta estimada de obra sin considerar venta"
   },
   {
     title: "Costo acumulado",
@@ -18,21 +24,21 @@ const kpis = [
     value: "$13.740.000",
     delta: "↑ +7,8%",
     type: "up",
-    footer: "Crédito fiscal disponible"
+    footer: "Crédito fiscal ya soportado en compras"
   },
   {
-    title: "Caja disponible",
-    value: "$21.000.000",
+    title: "Caja reservada impuestos",
+    value: "$9.500.000",
     delta: "↓ -1,5%",
     type: "down",
-    footer: "Liquidez actual del proyecto"
+    footer: "Seguimiento de liquidez para venta y cierre"
   }
 ];
 
 const chartData = [
   { month: "Ene", budget: 18, real: 16 },
   { month: "Feb", budget: 28, real: 25 },
-  { month: "Mar", budget: 42, real: 39 },
+  { month: "Mar", budget: 42, real: 46 },
   { month: "Abr", budget: 55, real: 58 },
   { month: "May", budget: 70, real: 68 },
   { month: "Jun", budget: 84, real: 79 },
@@ -42,23 +48,23 @@ const chartData = [
 const alerts = [
   {
     icon: "📄",
-    title: "4 documentos sin clasificación",
+    title: "4 documentos sin imputar",
     sub: "Faltan categoría contable y forma de pago"
   },
   {
     icon: "⚠️",
-    title: "Terminaciones sobre presupuesto",
-    sub: "El avance real supera lo estimado en 6,3%"
+    title: "Costo real sobre presupuesto",
+    sub: "Terminaciones van 6,3% sobre lo estimado"
   },
   {
     icon: "💵",
-    title: "Revisar caja para impuestos",
-    sub: "Conviene proyectar IVA débito y cierre de venta"
+    title: "IVA crédito acumulado relevante",
+    sub: "Revisar caja para venta y débito futuro"
   },
   {
     icon: "📅",
-    title: "Hito próximo de obra",
-    sub: "Instalación eléctrica y sanitaria pendiente esta semana"
+    title: "Hito próximo",
+    sub: "Cerrar instalación eléctrica y sanitaria esta semana"
   }
 ];
 
@@ -76,40 +82,42 @@ const docs = [
 ];
 
 const categories = [
-  { name: "Obra gruesa", pct: 34 },
+  { name: "Obra gruesa",   pct: 34 },
   { name: "Terminaciones", pct: 22 },
   { name: "Instalaciones", pct: 18 },
-  { name: "Proyectos", pct: 8 },
-  { name: "Permisos", pct: 6 },
-  { name: "Terreno", pct: 12 }
+  { name: "Proyectos",     pct: 8  },
+  { name: "Permisos",      pct: 6  },
+  { name: "Terreno",       pct: 12 }
 ];
 
 const bottomCards = [
   {
     label: "Terreno aportado",
     value: "$100.000.000",
-    sub: "Base del activo del proyecto",
+    sub: "Base de activo del proyecto",
     icon: "🏢"
   },
   {
     label: "Partidas abiertas",
     value: "11",
-    sub: "Pendientes entre obra y documentación",
+    sub: "Entre obra, permisos y cierre documental",
     icon: "📋"
   },
   {
     label: "Respaldo tributario",
     value: "92%",
-    sub: "Documentos con soporte correcto",
+    sub: "Documentos con soporte y clasificación correcta",
     icon: "🛡️"
   },
   {
     label: "Avance de obra",
     value: "68%",
-    sub: "Ejecución general estimada",
+    sub: "Ejecución general estimada del proyecto",
     icon: "🏗️"
   }
 ];
+
+/* ── NAVIGATION CONFIG ────────────────────────────────────── */
 
 const views = {
   inicio: {
@@ -149,6 +157,8 @@ const views = {
   }
 };
 
+/* ── RENDER FUNCTIONS ─────────────────────────────────────── */
+
 function renderKPIs() {
   const el = document.getElementById("section-kpis");
   if (!el) return;
@@ -160,7 +170,7 @@ function renderKPIs() {
           <div class="kpi-title">${kpi.title}</div>
           <div class="kpi-value">${kpi.value}</div>
         </div>
-        <div class="badge ${kpi.type}">${kpi.delta}</div>
+        <span class="badge ${kpi.type}">${kpi.delta}</span>
       </div>
       <div class="kpi-footer">${kpi.footer}</div>
     </div>
@@ -168,14 +178,16 @@ function renderKPIs() {
 }
 
 function renderChart() {
-  const bars = document.getElementById("chart-bars");
+  const bars   = document.getElementById("chart-bars");
   const labels = document.getElementById("chart-labels");
   if (!bars || !labels) return;
 
+  const maxVal = Math.max(...chartData.map((d) => Math.max(d.budget, d.real)));
+
   bars.innerHTML = chartData.map((item) => `
     <div class="chart-bar-group">
-      <div class="bar-budget" style="height:${item.budget}%"></div>
-      <div class="bar-real" style="height:${item.real}%"></div>
+      <div class="bar-budget" style="height:${Math.round((item.budget / maxVal) * 100)}%"></div>
+      <div class="bar-real"   style="height:${Math.round((item.real   / maxVal) * 100)}%"></div>
     </div>
   `).join("");
 
@@ -188,12 +200,12 @@ function renderAlerts() {
   const el = document.getElementById("alerts-list");
   if (!el) return;
 
-  el.innerHTML = alerts.map((alert) => `
+  el.innerHTML = alerts.map((a) => `
     <div class="alert-item">
-      <div class="alert-icon">${alert.icon}</div>
+      <div class="alert-icon">${a.icon}</div>
       <div>
-        <div class="alert-title">${alert.title}</div>
-        <div class="alert-sub">${alert.sub}</div>
+        <div class="alert-title">${a.title}</div>
+        <div class="alert-sub">${a.sub}</div>
       </div>
     </div>
   `).join("");
@@ -209,11 +221,11 @@ function renderDocs() {
       <div class="doc-name">${doc.name}</div>
       <div><span class="cat-badge ${doc.catCls}">${doc.cat}</span></div>
       <div class="doc-amount">${doc.amount}</div>
-      <div>${doc.pago}</div>
-      <div><span class="doc-icon">📄</span></div>
+      <div class="doc-pago">${doc.pago}</div>
+      <div class="doc-comprobante">📄</div>
       <div class="doc-actions">
-        <button class="action-btn edit" title="Editar">✏️</button>
-        <button class="action-btn del" title="Eliminar">🗑️</button>
+        <button class="action-btn" title="Editar">✏️</button>
+        <button class="action-btn" title="Eliminar">🗑️</button>
       </div>
     </div>
   `).join("");
@@ -226,8 +238,8 @@ function renderCategories() {
   el.innerHTML = categories.map((cat) => `
     <div class="cat-item">
       <div class="cat-row">
-        <div class="cat-name">${cat.name}</div>
-        <div class="cat-pct">${cat.pct}%</div>
+        <span class="cat-name">${cat.name}</span>
+        <span class="cat-pct">${cat.pct}%</span>
       </div>
       <div class="cat-track">
         <div class="cat-fill" style="width:${cat.pct}%"></div>
@@ -244,7 +256,7 @@ function renderBottomCards() {
     <div class="bottom-card">
       <div class="bottom-top">
         <div class="bottom-label">${card.label}</div>
-        <div>${card.icon}</div>
+        <div class="bottom-icon">${card.icon}</div>
       </div>
       <div class="bottom-value">${card.value}</div>
       <div class="bottom-sub">${card.sub}</div>
@@ -252,46 +264,55 @@ function renderBottomCards() {
   `).join("");
 }
 
-function updateVisibleSections(sectionIds = []) {
-  const allSections = document.querySelectorAll(".module-block");
+/* ── MODULE VISIBILITY ────────────────────────────────────── */
 
-  allSections.forEach((section) => {
-    section.classList.add("module-hidden");
-  });
+const ALL_SECTION_IDS = [
+  "section-kpis",
+  "section-charts",
+  "section-docs",
+  "section-bottom"
+];
 
-  sectionIds.forEach((id) => {
+function updateVisibleSections(visibleIds = []) {
+  ALL_SECTION_IDS.forEach((id) => {
     const el = document.getElementById(id);
-    if (el) {
+    if (!el) return;
+
+    if (visibleIds.includes(id)) {
       el.classList.remove("module-hidden");
+    } else {
+      el.classList.add("module-hidden");
     }
   });
 }
 
+/* ── NAVIGATION ───────────────────────────────────────────── */
+
 function setupNavigation() {
-  const buttons = document.querySelectorAll(".nav-btn");
-  const title = document.getElementById("page-title");
-  const subtitle = document.getElementById("page-subtitle");
+  const buttons  = document.querySelectorAll(".nav-btn[data-view]");
+  const titleEl  = document.getElementById("page-title");
+  const subEl    = document.getElementById("page-subtitle");
 
-  if (!buttons.length || !title || !subtitle) return;
+  if (!buttons.length || !titleEl || !subEl) return;
 
-  buttons.forEach((button) => {
-    button.addEventListener("click", () => {
-      buttons.forEach((btn) => btn.classList.remove("active"));
-      button.classList.add("active");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      buttons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
 
-      const view = button.dataset.view;
+      const view   = btn.dataset.view;
       const config = views[view];
+      if (!config) return;
 
-      if (config) {
-        title.textContent = config.title;
-        subtitle.textContent = config.subtitle;
-        updateVisibleSections(config.visible);
-      }
+      titleEl.textContent = config.title;
+      subEl.textContent   = config.subtitle;
+
+      updateVisibleSections(config.visible);
     });
   });
-
-  updateVisibleSections(views.inicio.visible);
 }
+
+/* ── INIT ─────────────────────────────────────────────────── */
 
 function initDashboard() {
   renderKPIs();
@@ -301,6 +322,8 @@ function initDashboard() {
   renderCategories();
   renderBottomCards();
   setupNavigation();
+
+  updateVisibleSections(views.inicio.visible);
 }
 
 document.addEventListener("DOMContentLoaded", initDashboard);

@@ -45,14 +45,11 @@
           <div class="search-wrap">
             <input type="text" placeholder="Buscar proveedor, documento o partida" />
           </div>
-
           <button class="btn-outline">Abril 2026</button>
-
           <button class="bell-btn" aria-label="Notificaciones">
             <span class="bell-dot"></span>
             🔔
           </button>
-
           <div class="user-chip">
             <div class="avatar">CB</div>
             <div>
@@ -70,13 +67,11 @@
           <div class="card">
             <div class="card-title">Presupuesto vs costo real</div>
             <div class="card-sub">Seguimiento mensual del proyecto</div>
-
             <div class="chart-area">
               <div class="chart-bars" id="chart-bars"></div>
               <div class="chart-labels" id="chart-labels"></div>
             </div>
           </div>
-
           <div class="card">
             <div class="card-title">Alertas críticas</div>
             <div class="card-sub">Lo que no conviene dejar pasar</div>
@@ -86,17 +81,18 @@
 
         <section class="docs-row module-block" id="section-docs">
           <div class="card">
-            <div class="card-title">Documentos recientes</div>
-            <div class="card-sub">Ingreso y control documental de obra</div>
-
+            <div class="card-title">Últimos 10 gastos</div>
+            <div class="card-sub">Tus gastos más recientes</div>
             <div class="table-wrap">
-              <div class="table-head">
-                <div>Proveedor</div>
-                <div>Tipo / monto</div>
-                <div>Estado</div>
+              <div class="table-head gastos-head">
                 <div>Fecha</div>
+                <div>Descripción</div>
+                <div>Categoría</div>
+                <div>Monto</div>
+                <div>Pago</div>
+                <div>Comprobante</div>
+                <div>Acciones</div>
               </div>
-
               <div id="docs-table"></div>
             </div>
           </div>
