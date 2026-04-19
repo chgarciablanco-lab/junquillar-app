@@ -10,7 +10,10 @@
 <div class="layout">
 
   <aside class="sidebar">
-    <div class="sidebar-logo"><div class="wordmark">Junqo.</div></div>
+    <div class="sidebar-logo">
+      <div class="wordmark">Junqo.</div>
+    </div>
+
     <nav class="sidebar-nav">
       <button class="nav-btn active" data-view="resumen">Resumen</button>
       <button class="nav-btn" data-view="control">Control de Proyecto</button>
@@ -21,13 +24,17 @@
       <button class="nav-btn" data-view="balance">Balance</button>
       <button class="nav-btn" data-view="reportes">Reportes</button>
     </nav>
+
     <div class="sidebar-card">
       <div class="label">Avance presupuesto</div>
-      <div class="big">44,6%</div>
-      <div class="sub">$ 80,2M de $ 180M ejecutado</div>
-      <div class="progress-track"><div class="progress-fill" style="width:44.6%"></div></div>
+      <div class="big">0%</div>
+      <div class="sub">$ 0 de presupuesto ejecutado</div>
+      <div class="progress-track">
+        <div class="progress-fill" style="width:0%"></div>
+      </div>
       <button id="btn-ver-reportes">Ver reportes</button>
     </div>
+
     <div class="sidebar-user">
       <div class="avatar">CB</div>
       <div>
@@ -41,7 +48,7 @@
     <header class="header">
       <div class="header-left">
         <h1 id="page-title" class="page-title">Resumen</h1>
-        <p id="page-subtitle">Vista ejecutiva del proyecto · Dic 2025 – Abr 2026</p>
+        <p id="page-subtitle">Vista ejecutiva del proyecto</p>
       </div>
       <div class="header-right">
         <div class="search-wrap">
@@ -56,18 +63,30 @@
 
     <div class="content">
 
-      <!-- KPIs -->
+      <!-- RESUMEN -->
       <section class="kpi-grid module-block" id="section-kpis"></section>
 
-      <!-- UPLOAD + FILTER -->
-      <section class="upload-filter-row module-block" id="section-upload">
+      <section class="module-block" id="section-alerts">
+        <div class="card">
+          <div class="card-title">Alertas críticas</div>
+          <div class="card-sub">Calculadas desde los datos registrados en Supabase</div>
+          <div id="alerts-list" class="alerts-2x2"></div>
+        </div>
+      </section>
+
+      <section class="bottom-grid module-block" id="section-bottom"></section>
+
+      <!-- DOCUMENTOS / CARGA -->
+      <section class="upload-filter-row module-block module-hidden" id="section-upload">
         <div class="card upload-card">
           <div class="card-title">1. &nbsp;Adjuntar factura o boleta</div>
           <div class="card-sub">Puedes adjuntar un archivo o sacar una foto</div>
           <div class="dropzone">
             <div class="dropzone-icon">☁️</div>
             <div class="dropzone-text">Arrastra tu archivo aquí</div>
-            <div class="dropzone-sub">o <span class="dropzone-link" onclick="document.getElementById('file-input').click()">selecciona un archivo</span></div>
+            <div class="dropzone-sub">
+              o <span class="dropzone-link" onclick="document.getElementById('file-input').click()">selecciona un archivo</span>
+            </div>
             <input type="file" id="file-input" accept=".jpg,.jpeg,.png,.pdf" hidden/>
           </div>
           <div class="dropzone-formats">Formatos aceptados: JPG, PNG, PDF (máx. 10 MB)</div>
@@ -76,6 +95,7 @@
             <button class="upload-btn-secondary">📷 &nbsp;Sacar foto</button>
           </div>
         </div>
+
         <div class="card filter-card">
           <div class="card-title">2. &nbsp;Buscar y filtrar</div>
           <div class="card-sub">Encuentra tus gastos fácilmente</div>
@@ -88,8 +108,11 @@
               <label class="filter-label">Categoría</label>
               <select class="filter-select" id="filter-cat">
                 <option value="">Todas</option>
-                <option>Materiales</option><option>Mano de obra</option>
-                <option>Servicios</option><option>Herramientas</option><option>Transporte</option>
+                <option>Materiales</option>
+                <option>Mano de obra</option>
+                <option>Servicios</option>
+                <option>Herramientas</option>
+                <option>Transporte</option>
               </select>
             </div>
             <div class="filter-group">
@@ -106,17 +129,23 @@
               <label class="filter-label">Tipo doc.</label>
               <select class="filter-select" id="filter-tipo">
                 <option value="">Todos</option>
-                <option value="FA">FA — Factura Afecta</option>
-                <option value="GD">GD — Guía de Despacho</option>
-                <option value="BE">BE — Boleta Exenta</option>
+                <option value="Factura">Factura</option>
+                <option value="Guía despacho">Guía despacho</option>
+                <option value="Boleta">Boleta</option>
+                <option value="FA">FA</option>
+                <option value="GD">GD</option>
+                <option value="BE">BE</option>
               </select>
             </div>
             <div class="filter-group">
               <label class="filter-label">Método de pago</label>
               <select class="filter-select" id="filter-pago">
                 <option value="">Todos</option>
-                <option>Contado</option><option>Tarjeta débito</option>
-                <option>Crédito</option><option>Efectivo</option>
+                <option>Contado</option>
+                <option>Transferencia</option>
+                <option>Débito</option>
+                <option>Crédito</option>
+                <option>Efectivo</option>
               </select>
             </div>
           </div>
@@ -127,7 +156,7 @@
         </div>
       </section>
 
-      <!-- BUSCADOR STANDALONE para Gastos (sin adjuntar) -->
+      <!-- BUSCADOR PARA GASTOS -->
       <section class="module-block module-hidden" id="section-filtro-solo">
         <div class="card filter-card">
           <div class="card-title">Buscar y filtrar gastos</div>
@@ -141,8 +170,11 @@
               <label class="filter-label">Categoría</label>
               <select class="filter-select" id="filter-cat-gastos">
                 <option value="">Todas</option>
-                <option>Materiales</option><option>Mano de obra</option>
-                <option>Servicios</option><option>Herramientas</option><option>Transporte</option>
+                <option>Materiales</option>
+                <option>Mano de obra</option>
+                <option>Servicios</option>
+                <option>Herramientas</option>
+                <option>Transporte</option>
               </select>
             </div>
             <div class="filter-group">
@@ -157,7 +189,12 @@
               <label class="filter-label">Tipo doc.</label>
               <select class="filter-select" id="filter-tipo-gastos">
                 <option value="">Todos</option>
-                <option value="FA">FA</option><option value="GD">GD</option><option value="BE">BE</option>
+                <option value="Factura">Factura</option>
+                <option value="Guía despacho">Guía despacho</option>
+                <option value="Boleta">Boleta</option>
+                <option value="FA">FA</option>
+                <option value="GD">GD</option>
+                <option value="BE">BE</option>
               </select>
             </div>
           </div>
@@ -169,80 +206,76 @@
       </section>
 
       <!-- LIBRO DE GASTOS -->
-      <section class="module-block" id="section-docs">
+      <section class="module-block module-hidden" id="section-docs">
         <div class="card">
           <div class="card-header-row">
             <div>
               <div class="card-title">Libro de Gastos — Casa Junquillar</div>
-              <div class="card-sub" id="docs-subtitle">99 registros · FA = Factura Afecta · GD = Guía de Despacho · BE = Boleta Exenta</div>
+              <div class="card-sub" id="docs-subtitle">Datos cargados desde Supabase</div>
             </div>
             <div class="export-btns">
               <button class="export-btn" onclick="exportCSV()">⬇ CSV</button>
               <button class="export-btn export-btn-xl" onclick="exportExcel()">⬇ Excel</button>
             </div>
           </div>
+
           <div class="table-wrap">
             <div class="table-head gastos-head">
-              <div>Fecha</div><div>Proveedor</div><div>RUT</div><div>Tipo</div>
-              <div>Categoría</div><div>Costo Neto</div><div>IVA CF</div>
-              <div>Total Doc.</div><div>CF?</div><div>Método Pago</div><div>Acc.</div>
+              <div>Fecha</div>
+              <div>Proveedor</div>
+              <div>RUT</div>
+              <div>Tipo</div>
+              <div>Categoría</div>
+              <div>Costo Neto</div>
+              <div>IVA CF</div>
+              <div>Total Doc.</div>
+              <div>CF?</div>
+              <div>Método Pago</div>
+              <div>Acc.</div>
             </div>
             <div id="docs-table"></div>
           </div>
+
           <div class="table-footer">
             <button class="load-more-btn" id="load-more-btn">Ver más</button>
           </div>
         </div>
       </section>
 
-      <!-- ALERTAS -->
-      <section class="module-block" id="section-alerts">
-        <div class="card">
-          <div class="card-title">Alertas críticas</div>
-          <div class="card-sub">Lo que no conviene dejar pasar</div>
-          <div id="alerts-list" class="alerts-2x2"></div>
-        </div>
-      </section>
-
       <!-- CONTROL DE PROYECTO -->
       <section class="module-block module-hidden" id="section-control">
+        <div class="kpi-grid" id="control-kpis"></div>
 
-        <!-- KPIs de control -->
-        <div class="kpi-grid" id="control-kpis" style="margin-bottom:20px"></div>
-
-        <!-- Avance por etapas -->
-        <div class="card" style="margin-bottom:20px">
-          <div class="card-title">Avance por Etapa de Obra</div>
-          <div class="card-sub">Según Contrato CSS Asesorías y Construcción Ltda. — Anexo N°1</div>
-          <div id="control-etapas" class="etapas-grid" style="margin-top:16px"></div>
-        </div>
-
-        <!-- Hitos y estado -->
-        <div class="card" style="margin-bottom:20px">
-          <div class="card-title">Hitos y Estado del Proyecto</div>
-          <div class="card-sub">Seguimiento por área · Estado actual</div>
-          <div id="control-hitos" style="margin-top:14px"></div>
-        </div>
-
-        <!-- Costos por categoría y mes -->
         <div class="card">
-          <div class="card-header-row">
-            <div>
-              <div class="card-title">Costos por Categoría y Mes</div>
-              <div class="card-sub">Inversiones Los Alerces SpA · Dic 2025 – Abr 2026</div>
-            </div>
-          </div>
-          <div class="table-wrap" style="margin-top:14px">
+          <div class="card-title">Avance por Etapa de Obra</div>
+          <div class="card-sub">Calculado desde categorías registradas en Supabase</div>
+          <div id="control-etapas" class="etapas-grid"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Hitos y Estado del Proyecto</div>
+          <div class="card-sub">Estado calculado desde datos disponibles</div>
+          <div id="control-hitos"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Costos por Categoría y Mes</div>
+          <div class="card-sub">Calculado desde Supabase</div>
+          <div class="table-wrap">
             <div class="table-head ctrl-cat-head">
-              <div>Categoría</div><div>Tipo</div>
-              <div>Dic 2025</div><div>Ene 2026</div><div>Feb 2026</div>
-              <div>Mar 2026</div><div>Abr 2026</div>
-              <div>Total</div><div>%</div>
+              <div>Categoría</div>
+              <div>Tipo</div>
+              <div>Mes 1</div>
+              <div>Mes 2</div>
+              <div>Mes 3</div>
+              <div>Mes 4</div>
+              <div>Mes 5</div>
+              <div>Total</div>
+              <div>%</div>
             </div>
             <div id="control-cat"></div>
           </div>
         </div>
-
       </section>
 
       <!-- PROVEEDORES -->
@@ -251,7 +284,7 @@
           <div class="card-header-row">
             <div>
               <div class="card-title">Análisis de Proveedores</div>
-              <div class="card-sub">34 proveedores · Ordenado por costo total · Top 20 mostrado</div>
+              <div class="card-sub">Calculado desde gastos registrados</div>
             </div>
             <div class="export-btns">
               <button class="export-btn" onclick="exportProvCSV()">⬇ CSV</button>
@@ -260,52 +293,49 @@
           </div>
           <div class="table-wrap">
             <div class="table-head prov-head">
-              <div>#</div><div>Proveedor</div><div>RUT</div><div>Categoría</div>
-              <div>N° Docs</div><div>Costo Neto (CLP)</div><div>IVA CF (CLP)</div><div>% s/ Total</div>
+              <div>#</div>
+              <div>Proveedor</div>
+              <div>RUT</div>
+              <div>Categoría</div>
+              <div>N° Docs</div>
+              <div>Costo Neto</div>
+              <div>IVA CF</div>
+              <div>% s/ Total</div>
             </div>
             <div id="proveedores-table"></div>
           </div>
         </div>
       </section>
 
-      <!-- CAJA e IVA -->
+      <!-- CAJA E IVA -->
       <section class="module-block module-hidden" id="section-caja">
-        <div class="kpi-grid" style="margin-bottom:20px">
-          <div class="kpi-card">
-            <div class="kpi-top"><div><div class="kpi-title">Inversión total (Costo Neto)</div><div class="kpi-value">$ 80.209.999</div></div><span class="badge up">↑ 44,6%</span></div>
-            <div class="kpi-footer">Dic 2025 – Abr 2026 · 99 documentos</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-top"><div><div class="kpi-title">IVA Crédito Fiscal</div><div class="kpi-value">$ 15.198.267</div></div><span class="badge up">↑ 19,0%</span></div>
-            <div class="kpi-footer">86 docs CF · Art. 23 D.L. 825 recuperable</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-top"><div><div class="kpi-title">Total Activo Contable</div><div class="kpi-value">$ 95.408.266</div></div><span class="badge up">↑ 0,0%</span></div>
-            <div class="kpi-footer">Obra en Curso + IVA CF</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-top"><div><div class="kpi-title">Documentos registrados</div><div class="kpi-value">99 docs</div></div><span class="badge up">↑ 34</span></div>
-            <div class="kpi-footer">84 FA · 2 GD · 13 BE</div>
-          </div>
-        </div>
-        <div class="card" style="margin-bottom:20px">
+        <div class="kpi-grid" id="caja-kpis" style="margin-bottom:20px"></div>
+        <div class="card">
           <div class="card-title">Clasificación por Tipo de Documento</div>
-          <div class="card-sub">Art. 23 D.L. 825 · IVA Crédito Fiscal recuperable</div>
-          <div class="table-wrap" style="margin-top:14px">
+          <div class="card-sub">Calculado desde documentos registrados</div>
+          <div class="table-wrap">
             <div class="table-head caja-tipos-head">
-              <div>Tipo documento</div><div>N° docs</div><div>Base costo (CLP)</div>
-              <div>IVA (CLP)</div><div>CF?</div><div>Criterio contable</div>
+              <div>Tipo documento</div>
+              <div>N° docs</div>
+              <div>Base costo</div>
+              <div>IVA</div>
+              <div>CF?</div>
+              <div>Criterio contable</div>
             </div>
             <div id="caja-tipos"></div>
           </div>
         </div>
+
         <div class="card">
           <div class="card-title">Detalle Mensual — IVA Crédito Fiscal</div>
-          <div class="card-sub">Acumulado recuperable en F29 SII</div>
-          <div class="table-wrap" style="margin-top:14px">
+          <div class="card-sub">Calculado desde registros de Supabase</div>
+          <div class="table-wrap">
             <div class="table-head caja-mensual-head">
-              <div>Mes</div><div>Docs CF</div><div>Base Neta (CLP)</div>
-              <div>IVA CF (CLP)</div><div>Acumulado CF (CLP)</div>
+              <div>Mes</div>
+              <div>Docs CF</div>
+              <div>Base Neta</div>
+              <div>IVA CF</div>
+              <div>Acumulado CF</div>
             </div>
             <div id="caja-mensual"></div>
           </div>
@@ -316,81 +346,44 @@
       <section class="module-block module-hidden" id="section-balance">
         <div class="card">
           <div class="card-title">Balance General — Proyecto Casa Junquillar</div>
-          <div class="card-sub">Período: 04 de diciembre de 2025 al 01/04/2026 · Cifras expresadas en pesos chilenos (CLP)</div>
-          <div class="balance-nota">⚠ SUMAS IGUALES — DEBE = DEUDOR = ACTIVO = $ 95.408.266 &nbsp;·&nbsp; Base legal: D.L. 825 · NIC 2 · NIC 11</div>
-          <div class="table-wrap" style="margin-top:14px;overflow-x:auto">
-            <div class="balance-group-head">
-              <div class="bg-empty"></div><div class="bg-empty"></div>
-              <div class="bg-group" style="grid-column:span 2">MOVIMIENTOS</div>
-              <div class="bg-group" style="grid-column:span 2">SALDOS</div>
-              <div class="bg-group" style="grid-column:span 2">BALANCE</div>
-              <div class="bg-group" style="grid-column:span 2">RESULTADOS</div>
-            </div>
+          <div class="card-sub">Balance calculado desde gastos registrados en Supabase</div>
+          <div class="table-wrap">
             <div class="table-head balance-head">
-              <div>N°</div><div>Cuenta</div>
-              <div>DEBE</div><div>HABER</div>
-              <div>DEUDOR</div><div>ACREEDOR</div>
-              <div>ACTIVO</div><div>PASIVO</div>
-              <div>PÉRDIDA</div><div>GANANCIA</div>
+              <div>N°</div>
+              <div>Cuenta</div>
+              <div>DEBE</div>
+              <div>HABER</div>
+              <div>DEUDOR</div>
+              <div>ACREEDOR</div>
+              <div>ACTIVO</div>
+              <div>PASIVO</div>
+              <div>PÉRDIDA</div>
+              <div>GANANCIA</div>
             </div>
             <div id="balance-table"></div>
-          </div>
-          <div class="balance-notas-legales">
-            <p><strong>Notas:</strong></p>
-            <p>1. Factura afecta / Guía de Despacho: costo = Neto, IVA registrado como Crédito Fiscal recuperable (Art. 23 D.L. 825, F29 SII).</p>
-            <p>2. Boleta exenta: costo = Total (exenta de IVA, sin crédito fiscal).</p>
-            <p>3. Los costos se activan como Inventario Inmobiliario (Obra en Curso) — no se reconocen como gasto del período.</p>
-            <p>4. No se registra HABER: no existen ingresos ni fuentes de financiamiento declaradas en el registro.</p>
-            <p>5. Resultado indeterminado hasta la venta/recepción definitiva del proyecto.</p>
           </div>
         </div>
       </section>
 
       <!-- REPORTES -->
       <section class="module-block module-hidden" id="section-reportes">
-        <div class="reportes-export-bar">
-          <div>
-            <div class="card-title" style="font-size:16px">Reportes — Casa Junquillar</div>
-            <div class="card-sub">Exporta para contador, socio o banco</div>
-          </div>
-          <div class="export-btns">
-            <button class="export-btn" onclick="exportReporteCSV()">⬇ CSV Gastos</button>
-            <button class="export-btn export-btn-xl" onclick="exportReporteExcel()">⬇ Excel Gastos</button>
-            <button class="export-btn export-btn-pdf" onclick="exportReportePDF()">🖨 Imprimir / PDF</button>
-          </div>
-        </div>
-        <div class="card" style="margin-bottom:20px">
-          <div class="card-title">Costos Reales por Categoría y Mes</div>
-          <div class="card-sub">Inversiones Los Alerces SpA · Dic 2025 – Abr 2026</div>
-          <div class="table-wrap" style="margin-top:14px">
-            <div class="table-head ctrl-cat-head">
-              <div>Categoría</div><div>Tipo</div>
-              <div>Dic 2025</div><div>Ene 2026</div><div>Feb 2026</div>
-              <div>Mar 2026</div><div>Abr 2026</div>
-              <div>Costo Total</div><div>%</div>
-            </div>
-            <div id="reportes-cat"></div>
-          </div>
-        </div>
         <div class="card">
-          <div class="card-title">Control por Etapa de Obra</div>
-          <div class="card-sub">Según Contrato CSS Asesorías — Anexo N°1</div>
-          <div class="table-wrap" style="margin-top:14px">
-            <div class="table-head" style="grid-template-columns:1.5fr 1.1fr 1.1fr 1.1fr 1fr">
-              <div>Etapa</div><div>Costo real</div><div>Presupuesto</div>
-              <div>Desviación</div><div>% ejecutado</div>
-            </div>
-            <div id="reportes-etapas"></div>
-          </div>
+          <div class="card-title">Reporte por Categoría</div>
+          <div class="card-sub">Calculado desde gastos registrados</div>
+          <div id="reportes-cat"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Reporte Mensual</div>
+          <div class="card-sub">Calculado desde gastos registrados</div>
+          <div id="reportes-etapas"></div>
         </div>
       </section>
-
-      <!-- BOTTOM CARDS -->
-      <section class="bottom-grid module-block" id="section-bottom"></section>
 
     </div>
   </main>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabaseClient.js"></script>
 <script src="app.js"></script>
