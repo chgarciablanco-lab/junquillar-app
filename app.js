@@ -141,31 +141,63 @@ function getFileGroup(extension){
   return "pdf";
 }
 // ── Column name aliases: maps Excel headers → DB field names ──────────────────
-const COLUMN_ALIASES = {
-  fecha:["fecha","date","f."],
-  proveedor:["proveedor","supplier","nombre","razon social","razón social"],
-  rut:["rut","r.u.t","r.u.t.","rut proveedor"],
-  tipo_documento:["tipo","tipo documento","tipo doc","tipo doc.","type","documento"],
-  numero_documento:["n° documento","nro documento","numero documento","número documento","folio","n°","nro","doc"],
-  neto:["neto","monto neto","base","base neta","costo neto","net"],
-  iva:["iva","i.v.a","i.v.a.","tax","impuesto"],
-  total:["total","total doc","total documento","monto total","total bruto"],
-  categoria:["categoria","categoría","category","partida","etapa"],
-  metodo_pago:["metodo pago","método pago","metodo de pago","método de pago","forma pago","forma de pago","pago","payment"],
-  observacion:["observacion","observación","nota","notas","comment","comentario"]
+// ── PARSER EXCEL / CSV ────────────────────────────────────────────────────────
+// Estructura esperada del Excel:
+//   Fila 1: título (se ignora)
+//   Fila 2: encabezados  →  Fecha | Proveedor | RUT | Tipo | Nº Documento | Neto | IVA | Total | Categoría | Método de Pago | Proyecto
+//   Fila 3+: datos
+//   Última fila: puede ser fila de TOTAL (se ignora)
+
+// Mapeo exacto de encabezados del Excel → campos Supabase
+const EXACT_HEADERS = {
+  0:  "fecha",
+  1:  "proveedor",
+  2:  "rut",
+  3:  "tipo_documento",
+  4:  "numero_documento",
+  5:  "neto",
+  6:  "iva",
+  7:  "total",
+  8:  "categoria",
+  9:  "metodo_pago",
+  10: "proyecto"
 };
 
-function normalizeHeader(h){
-  return String(h||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
-}
+// Aliases flexibles para otros Excel con encabezados distintos
+const HEADER_ALIASES = {
+  fecha:            ["fecha","date"],
+  proveedor:        ["proveedor","supplier","nombre","razón social","razon social","nombre proveedor"],
+  rut:              ["rut","r.u.t","r.u.t.","rut proveedor"],
+  tipo_documento:   ["tipo","tipo documento","tipo doc","tipo doc.","type","documento","nº documento"],
+  numero_documento: ["nº documento","n° documento","numero documento","número documento","folio","nro","n°","doc"],
+  neto:             ["neto","monto neto","base neta","costo neto","net","base"],
+  iva:              ["iva","i.v.a","i.v.a.","tax","impuesto"],
+  total:            ["total","total doc","total documento","monto total","total bruto"],
+  categoria:        ["categoría","categoria","category","partida","etapa"],
+  metodo_pago:      ["método de pago","metodo de pago","método pago","metodo pago","forma pago","forma de pago","pago","payment"],
+  proyecto:         ["proyecto","project"]
+};
 
-function mapHeaders(headerRow){
+function normH(h){ return String(h||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim(); }
+
+function buildColMap(headerRow){
+  // 1. Try exact positional match (our Excel format)
+  const knownHeaders = ["fecha","proveedor","rut","tipo","nº documento","neto","iva","total","categoría","método de pago","proyecto"];
+  const normalizedRow = headerRow.map(normH);
+  const exactMatch = knownHeaders.every((h,i) => normalizedRow[i] && normalizedRow[i].includes(normH(h)));
+  if(exactMatch){
+    // Use positional map directly
+    const map = {};
+    Object.entries(EXACT_HEADERS).forEach(([idx, field]) => { map[field] = Number(idx); });
+    return map;
+  }
+  // 2. Fallback: alias matching
   const map = {};
-  headerRow.forEach((raw, idx) => {
-    const norm = normalizeHeader(raw);
-    for(const [field, aliases] of Object.entries(COLUMN_ALIASES)){
-      if(aliases.some(a => norm === a || norm.includes(a))){
-        if(map[field] === undefined) map[field] = idx;
+  normalizedRow.forEach((norm, idx) => {
+    for(const [field, aliases] of Object.entries(HEADER_ALIASES)){
+      if(map[field] !== undefined) continue;
+      if(aliases.some(a => norm === normH(a) || norm.includes(normH(a)))){
+        map[field] = idx;
         break;
       }
     }
@@ -173,79 +205,97 @@ function mapHeaders(headerRow){
   return map;
 }
 
-function parseExcelDate(val){
-  if(!val) return null;
-  // Excel serial date number
+function toDateISO(val){
+  if(val === null || val === undefined || val === "") return null;
+  // Excel serial number
   if(typeof val === "number"){
     const d = new Date(Math.round((val - 25569) * 86400 * 1000));
-    return d.toISOString().slice(0,10);
+    if(!isNaN(d)) return d.toISOString().slice(0,10);
   }
   const s = String(val).trim();
-  // dd-mm-yyyy or dd/mm/yyyy
-  if(/^\d{2}[\/\-]\d{2}[\/\-]\d{4}$/.test(s)){
-    const [d,m,y] = s.split(/[\/\-]/);
+  if(/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(s)){
+    const [d,m,y] = s.split(/[-\/]/);
     return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
   }
-  // yyyy-mm-dd
   if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
-  return s || null;
+  return null;
 }
 
-function parseNumericField(val){
+function toNum(val){
   if(val === null || val === undefined || val === "") return null;
+  if(typeof val === "number") return val;
   const n = Number(String(val).replace(/\./g,"").replace(",",".").replace(/[^0-9.\-]/g,""));
   return Number.isFinite(n) ? n : null;
 }
 
-function parseSheetRows(worksheet){
-  const range = window.XLSX.utils.decode_range(worksheet["!ref"] || "A1");
-  const rows = [];
-  for(let R = range.s.r; R <= range.e.r; R++){
-    const row = [];
-    for(let C = range.s.c; C <= range.e.c; C++){
-      const cell = worksheet[window.XLSX.utils.encode_cell({r:R, c:C})];
-      row.push(cell ? cell.v : "");
-    }
-    rows.push(row);
-  }
-  return rows;
+function isSkipRow(row, colMap){
+  const proveedor = String(row[colMap.proveedor ?? 1] || "").trim().toLowerCase();
+  const total     = String(row[colMap.total     ?? 7] || "").trim().toLowerCase();
+  const neto      = String(row[colMap.neto      ?? 5] || "").trim().toLowerCase();
+  // Skip title rows, header rows, total rows, empty rows
+  if(!row.some(c => String(c||"").trim())) return true;
+  if(["total","subtotal","totales","sub total"].includes(proveedor)) return true;
+  if(["total","subtotal","totales","sub total"].includes(neto))      return true;
+  if(proveedor === "proveedor" || proveedor === "supplier")          return true;
+  return false;
 }
 
-function excelRowsToGastos(rows, fotoPath){
-  if(!rows || rows.length < 2) return [];
-  // Find header row: first row with >= 3 non-empty cells
-  let headerIdx = 0;
-  for(let i = 0; i < Math.min(5, rows.length); i++){
-    if(rows[i].filter(c => String(c||"").trim()).length >= 3){ headerIdx = i; break; }
+function sheetToGastos(allRows, fotoPath){
+  if(!allRows || allRows.length < 2) return [];
+
+  // Find header row: first row where col 0 looks like "fecha" or col 1 like "proveedor"
+  let headerRowIdx = -1;
+  for(let i = 0; i < Math.min(5, allRows.length); i++){
+    const r = allRows[i];
+    const c0 = normH(r[0]);
+    const c1 = normH(r[1]);
+    if(c0 === "fecha" || c0.includes("fecha") || c1 === "proveedor" || c1.includes("proveedor")){
+      headerRowIdx = i;
+      break;
+    }
   }
-  const headerRow = rows[headerIdx];
-  const colMap = mapHeaders(headerRow);
+  if(headerRowIdx === -1){
+    // No header found, try row 0 anyway
+    headerRowIdx = 0;
+  }
+
+  const headerRow = allRows[headerRowIdx];
+  const colMap = buildColMap(headerRow);
+
+  // Need at minimum fecha or proveedor mapped
+  if(colMap.fecha === undefined && colMap.proveedor === undefined){
+    console.warn("No se encontraron columnas reconocibles en el Excel.");
+    return [];
+  }
+
   const results = [];
-  for(let i = headerIdx + 1; i < rows.length; i++){
-    const row = rows[i];
-    if(!row || row.every(c => !String(c||"").trim())) continue; // skip empty rows
+  for(let i = headerRowIdx + 1; i < allRows.length; i++){
+    const row = allRows[i];
+    if(isSkipRow(row, colMap)) continue;
     const get = field => colMap[field] !== undefined ? row[colMap[field]] : undefined;
-    const neto  = parseNumericField(get("neto"));
-    const iva   = parseNumericField(get("iva"));
-    const total = parseNumericField(get("total"));
-    // Skip rows that look like totals or headers repeated
-    const proveedor = String(get("proveedor")||"").trim();
-    if(["total","subtotal","totales"].includes(proveedor.toLowerCase())) continue;
+
+    const fechaVal = toDateISO(get("fecha"));
+    const neto     = toNum(get("neto"));
+    const iva      = toNum(get("iva"));
+    const total    = toNum(get("total"));
+
+    // Skip rows with no usable data
+    if(!fechaVal && !get("proveedor") && !neto) continue;
+
     results.push({
-      fecha:           parseExcelDate(get("fecha")) || new Date().toISOString().slice(0,10),
-      proveedor:       proveedor || null,
-      rut:             String(get("rut")||"").trim() || null,
-      tipo_documento:  String(get("tipo_documento")||"").trim() || null,
-      numero_documento:String(get("numero_documento")||"").trim() || null,
-      neto:            neto,
-      iva:             iva,
-      total:           total,
-      categoria:       String(get("categoria")||"").trim() || null,
-      metodo_pago:     String(get("metodo_pago")||"").trim() || null,
-      observacion:     String(get("observacion")||"").trim() || null,
-      proyecto:        PROJECT_NAME,
-      foto_path:       fotoPath,
-      estado_ocr:      "importado"
+      fecha:            fechaVal || new Date().toISOString().slice(0,10),
+      proveedor:        String(get("proveedor") || "").trim() || null,
+      rut:              String(get("rut")        || "").trim() || null,
+      tipo_documento:   String(get("tipo_documento")   || "").trim() || null,
+      numero_documento: String(get("numero_documento") || "").trim() || null,
+      neto:             neto,
+      iva:              iva,
+      total:            total,
+      categoria:        String(get("categoria")   || "").trim() || null,
+      metodo_pago:      String(get("metodo_pago") || "").trim() || null,
+      proyecto:         PROJECT_NAME,
+      foto_path:        fotoPath,
+      estado_ocr:       "importado"
     });
   }
   return results;
@@ -257,13 +307,13 @@ async function parseSpreadsheet(file, fotoPath){
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result);
-        const workbook = window.XLSX.read(data, { type:"array" });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const rows = parseSheetRows(worksheet);
-        resolve(excelRowsToGastos(rows, fotoPath));
+        const wb = window.XLSX.read(data, { type:"array", cellDates:false });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        // Get raw values (not formatted strings) so numbers stay as numbers
+        const allRows = window.XLSX.utils.sheet_to_json(ws, { header:1, defval:"", raw:true });
+        resolve(sheetToGastos(allRows, fotoPath));
       } catch(err){
-        console.error("Error parseando planilla:", err);
+        console.error("Error parseando Excel:", err);
         resolve([]);
       }
     };
@@ -279,9 +329,10 @@ async function parseCSV(file, fotoPath){
       try {
         const text = e.target.result;
         const sep = text.includes(";") ? ";" : ",";
-        const lines = text.split(/\r?\n/).filter(l => l.trim());
-        const rows = lines.map(l => l.split(sep).map(c => c.replace(/^"|"$/g,"").trim()));
-        resolve(excelRowsToGastos(rows, fotoPath));
+        const allRows = text.split(/\r?\n/)
+          .filter(l => l.trim())
+          .map(l => l.split(sep).map(c => c.replace(/^"|"$/g,"").trim()));
+        resolve(sheetToGastos(allRows, fotoPath));
       } catch(err){
         console.error("Error parseando CSV:", err);
         resolve([]);
@@ -295,102 +346,98 @@ async function parseCSV(file, fotoPath){
 async function handleFileUpload(event){
   const file = event.target.files?.[0];
   if(!file) return;
+
   const extension = getFileExtension(file.name);
   if(!ALLOWED_FILE_EXTENSIONS.includes(extension)){
     alert("Formato no permitido. Usa JPG, PNG, PDF, Excel o CSV.");
-    event.target.value = "";
-    return;
+    event.target.value = ""; return;
   }
   if(file.size > MAX_FILE_SIZE_MB * 1024 * 1024){
     alert(`El archivo supera el máximo permitido de ${MAX_FILE_SIZE_MB} MB.`);
-    event.target.value = "";
-    return;
+    event.target.value = ""; return;
   }
   if(typeof window.supabaseClient === "undefined"){
-    alert("Supabase no está configurado. Revisa que exista supabaseClient.js y que cargue antes de app.js.");
-    event.target.value = "";
-    return;
+    alert("Supabase no está configurado.");
+    event.target.value = ""; return;
+  }
+  if((["xls","xlsx","csv"].includes(extension)) && typeof window.XLSX === "undefined"){
+    alert("La librería para leer Excel no está cargada. Verifica tu conexión a internet.");
+    event.target.value = ""; return;
   }
 
-  const safeName = sanitizeFileName(file.name);
-  const fileGroup = getFileGroup(extension);
-  const filePath = `junquillar/${fileGroup}/${Date.now()}-${safeName}`;
+  // ── Paso 1: parsear ANTES de subir (si es planilla) ──────────────────────
+  const isSpreadsheet = ["xls","xlsx"].includes(extension);
+  const isCSV = extension === "csv";
 
-  // 1. Subir archivo a Storage
+  let gastoRows = [];
+  if(isSpreadsheet || isCSV){
+    gastoRows = isCSV
+      ? await parseCSV(file, null)   // fotoPath = null por ahora
+      : await parseSpreadsheet(file, null);
+
+    if(!gastoRows.length){
+      alert("No se encontraron filas con datos reconocibles en el archivo.\n\nAsegúrate de que el Excel tenga encabezados en la fila 2:\nFecha | Proveedor | RUT | Tipo | Nº Documento | Neto | IVA | Total | Categoría | Método de Pago");
+      event.target.value = ""; return;
+    }
+  }
+
+  // ── Paso 2: subir archivo a Storage ──────────────────────────────────────
+  const safeName  = sanitizeFileName(file.name);
+  const fileGroup = getFileGroup(extension);
+  const filePath  = `junquillar/${fileGroup}/${Date.now()}-${safeName}`;
+
   const { data: uploadData, error: uploadError } = await window.supabaseClient.storage
     .from(BUCKET_NAME)
-    .upload(filePath, file, { cacheControl:"3600", upsert:false, contentType:file.type || undefined });
+    .upload(filePath, file, { cacheControl:"3600", upsert:false, contentType: file.type || undefined });
 
   if(uploadError){
     console.error("Error subiendo archivo:", uploadError);
-    alert(`No se pudo subir el archivo a Supabase Storage: ${uploadError.message || "Error desconocido"}`);
-    event.target.value = "";
-    return;
+    alert(`No se pudo subir el archivo: ${uploadError.message}`);
+    event.target.value = ""; return;
   }
 
   const storedPath = uploadData.path;
 
-  // 2. Si es planilla, parsear y insertar filas con datos reales
-  const isSpreadsheet = ["xls","xlsx"].includes(extension);
-  const isCSV = extension === "csv";
-
+  // ── Paso 3a: si es planilla → insertar filas en Supabase ─────────────────
   if(isSpreadsheet || isCSV){
-    if(typeof window.XLSX === "undefined"){
-      alert("La librería para leer Excel no está cargada. Verifica tu conexión a internet.");
-      event.target.value = "";
-      return;
-    }
-    const gastoRows = isCSV
-      ? await parseCSV(file, storedPath)
-      : await parseSpreadsheet(file, storedPath);
+    // Actualizar foto_path con el path real
+    gastoRows.forEach(r => r.foto_path = storedPath);
 
-    if(!gastoRows.length){
-      alert("El archivo se subió, pero no se encontraron filas con datos reconocibles.\nRevisa que los encabezados del Excel coincidan con los campos esperados (fecha, proveedor, neto, iva, total, etc.).");
-      event.target.value = "";
-      await loadData();
-      return;
-    }
-
-    // Insertar en lotes de 50
     const BATCH = 50;
-    let totalInserted = 0;
+    let inserted = 0;
     for(let i = 0; i < gastoRows.length; i += BATCH){
       const batch = gastoRows.slice(i, i + BATCH);
-      const { error: insertError } = await window.supabaseClient
+      const { error } = await window.supabaseClient
         .from("gastos_junquillar_app")
         .insert(batch);
-      if(insertError){
-        console.error("Error insertando lote:", insertError);
-        alert(`Se insertaron ${totalInserted} filas, luego ocurrió un error: ${insertError.message}`);
+      if(error){
+        console.error("Error insertando lote:", error);
+        alert(`Se insertaron ${inserted} filas, luego error: ${error.message}`);
         event.target.value = "";
-        await loadData();
-        return;
+        await loadData(); return;
       }
-      totalInserted += batch.length;
+      inserted += batch.length;
     }
-
-    alert(`✅ Planilla importada correctamente.\n${totalInserted} registros cargados desde "${file.name}".`);
+    alert(`✅ ${inserted} registros importados desde "${file.name}".`);
     event.target.value = "";
-    await loadData();
-    return;
+    await loadData(); return;
   }
 
-  // 3. Para imágenes y PDFs: crear un registro pendiente OCR
+  // ── Paso 3b: imagen o PDF → registro pendiente OCR ───────────────────────
   const { error: insertError } = await window.supabaseClient
     .from("gastos_junquillar_app")
     .insert({
-      fecha: new Date().toISOString().slice(0,10),
-      proyecto: PROJECT_NAME,
+      fecha:       new Date().toISOString().slice(0,10),
+      proyecto:    PROJECT_NAME,
       observacion: `Archivo adjunto: ${file.name}`,
-      estado_ocr: "pendiente",
-      foto_path: storedPath
+      estado_ocr:  "pendiente",
+      foto_path:   storedPath
     });
 
   if(insertError){
     console.error("Error creando registro:", insertError);
-    alert(`El archivo se subió, pero no se pudo crear el registro: ${insertError.message || "Error desconocido"}`);
-    event.target.value = "";
-    return;
+    alert(`Archivo subido pero no se pudo crear el registro: ${insertError.message}`);
+    event.target.value = ""; return;
   }
 
   alert("📎 Archivo adjuntado correctamente.");
