@@ -1,6 +1,15 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// ============================================================
+// JUNQO – Supabase client
+// ============================================================
+// 1) Crea tu proyecto en Supabase.
+// 2) Ve a Project Settings > API.
+// 3) Reemplaza estos valores por tu Project URL y anon public key.
+// NO pegues aquí la service_role key.
 
-const SUPABASE_URL = 'https://ccwaysefralvvcanfyck.supabase.co'
-const SUPABASE_KEY = 'sb_publishable_CkQMEYmO3PMnHS8NbtDd9A_En8pvV6W'
+const SUPABASE_URL = "PEGA_AQUI_TU_SUPABASE_URL";
+const SUPABASE_ANON_KEY = "PEGA_AQUI_TU_SUPABASE_ANON_KEY";
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+const supabaseClient = supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);

@@ -189,7 +189,8 @@ const alerts = [
 /* ── PAGINACIÓN ───────────────────────────────────────────── */
 let docsVisible = 3;
 const DOCS_PAGE = 5;
-let filteredDocs = [...docs];
+let activeDocs = [...docs];
+let filteredDocs = [...activeDocs];
 
 /* ── VIEWS ────────────────────────────────────────────────── */
 const views = {
@@ -233,6 +234,85 @@ function renderAlerts() {
     </div>`).join("");
 }
 
+/* ── SUPABASE ───────────────────────────────────────────────
+   Lee gastos desde Supabase si existe supabaseClient.
+   Si no está configurado, mantiene los datos mock actuales.
+──────────────────────────────────────────────────────────── */
+function formatoCLP(valor) {
+  if (valor === null || valor === undefined || valor === "") return "—";
+  const numero = Number(valor);
+  if (Number.isNaN(numero)) return "—";
+  return numero.toLocaleString("es-CL", {
+    style: "currency",
+    currency: "CLP",
+    maximumFractionDigits: 0
+  }).replace("CLP", "$").trim();
+}
+
+function formatoFechaCL(fecha) {
+  if (!fecha) return "—";
+  const [yyyy, mm, dd] = String(fecha).split("-");
+  if (!yyyy || !mm || !dd) return fecha;
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function categoriaToClass(categoria = "") {
+  const c = categoria.toLowerCase();
+  if (c.includes("mano")) return "cat-mano";
+  if (c.includes("herramienta")) return "cat-herramientas";
+  if (c.includes("servicio")) return "cat-servicios";
+  if (c.includes("transporte")) return "cat-transporte";
+  return "cat-materiales";
+}
+
+function mapGastoSupabaseToDoc(gasto) {
+  return {
+    date: formatoFechaCL(gasto.fecha),
+    name: gasto.proveedor || "Sin proveedor",
+    rut: gasto.rut || "—",
+    tipo: gasto.tipo_doc || "—",
+    cat: gasto.categoria || "Sin categoría",
+    catCls: categoriaToClass(gasto.categoria || ""),
+    costo: formatoCLP(gasto.costo_neto),
+    iva: gasto.iva === null || gasto.iva === undefined ? "—" : formatoCLP(gasto.iva),
+    total: formatoCLP(gasto.total),
+    cf: gasto.credito_fiscal ? "✔" : "—",
+    pago: gasto.metodo_pago || "—",
+    archivo_url: gasto.archivo_url || null,
+    estado: gasto.estado || "Ingresado"
+  };
+}
+
+async function cargarGastosDesdeSupabase() {
+  if (typeof supabaseClient === "undefined") {
+    console.warn("Supabase no configurado: se mantienen datos mock.");
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from("gastos_junquillar")
+    .select("*")
+    .order("fecha", { ascending: false });
+
+  if (error) {
+    console.error("Error cargando gastos desde Supabase:", error);
+    return;
+  }
+
+  if (!Array.isArray(data) || data.length === 0) {
+    console.info("Supabase conectado, pero la tabla gastos_junquillar está vacía. Se mantienen datos mock.");
+    return;
+  }
+
+  activeDocs = data.map(mapGastoSupabaseToDoc);
+  filteredDocs = [...activeDocs];
+
+  const activeView = document.querySelector(".nav-btn.active")?.dataset.view || "resumen";
+  renderDocs(activeView === "gastos" ? 10 : 3);
+
+  console.info(`Supabase conectado: ${activeDocs.length} gastos cargados.`);
+}
+
 /* ── RENDER GASTOS ────────────────────────────────────────── */
 function renderDocsRows() {
   const el  = document.getElementById("docs-table");
@@ -263,7 +343,7 @@ function renderDocsRows() {
 
 function renderDocs(initialCount) {
   docsVisible = initialCount || 3;
-  filteredDocs = [...docs];
+  filteredDocs = [...activeDocs];
   renderDocsRows();
   const btn = document.getElementById("load-more-btn");
   if (btn) {
@@ -284,7 +364,7 @@ function applyFilters() {
   const pago  = document.getElementById("filter-pago")?.value || "";
   const desde = document.getElementById("filter-desde")?.value || "";
   const hasta = document.getElementById("filter-hasta")?.value || "";
-  filteredDocs = docs.filter(d => {
+  filteredDocs = activeDocs.filter(d => {
     if (txt  && !d.name.toLowerCase().includes(txt) && !d.rut.includes(txt)) return false;
     if (cat  && d.cat  !== cat)  return false;
     if (tipo && d.tipo !== tipo) return false;
@@ -300,7 +380,7 @@ function applyFilters() {
 function clearFilters() {
   ["filter-text","filter-cat","filter-tipo","filter-pago","filter-desde","filter-hasta"]
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
-  filteredDocs = [...docs];
+  filteredDocs = [...activeDocs];
   docsVisible = 3;
   renderDocsRows();
 }
@@ -648,6 +728,7 @@ function initDashboard() {
   renderBottomCards();
   setupNavigation();
   updateVisibleSections(views.resumen.visible);
+  cargarGastosDesdeSupabase();
 }
 
 document.addEventListener("DOMContentLoaded", initDashboard);
