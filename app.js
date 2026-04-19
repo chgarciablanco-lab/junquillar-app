@@ -10,108 +10,200 @@ const kpis = [
   {title:"Documentos registrados",       value:"99 docs",      delta:"↑ 34",    type:"up",   footer:"84 FA · 2 GD · 13 BE"}
 ];
 
-/* ── GASTOS (99 registros) ────────────────────────────────── */
-const docs = [
-  {date:"04/12/2025",name:"Easy Retail S.A.",rut:"76.568.660-1",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 19.247",iva:"$ 3.657",total:"$ 22.904",cf:"✔",pago:"Tarjeta débito"},
-  {date:"04/12/2025",name:"Ebema S.A.",rut:"83.585.400-0",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 1.840.923",iva:"$ 349.775",total:"$ 2.190.698",cf:"✔",pago:"Contado"},
-  {date:"04/12/2025",name:"Energyfusion SPA",rut:"77.514.352-5",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 175.000",iva:"$ 33.250",total:"$ 208.250",cf:"✔",pago:"Contado"},
-  {date:"04/12/2025",name:"Ferretería Santander",rut:"77.860.066-8",tipo:"BE",cat:"Materiales",catCls:"cat-materiales",costo:"$ 19.800",iva:"—",total:"$ 19.800",cf:"—",pago:"Tarjeta débito"},
-  {date:"04/12/2025",name:"Sodimac S.A.",rut:"96.792.430-K",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 222.206",iva:"$ 42.219",total:"$ 264.425",cf:"✔",pago:"—"},
-  {date:"05/12/2025",name:"Easy Retail S.A.",rut:"76.568.660-1",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 19.247",iva:"$ 3.657",total:"$ 22.904",cf:"✔",pago:"Tarjeta débito"},
-  {date:"09/12/2025",name:"Ferretería Las Rastras SPA",rut:"76.861.313-9",tipo:"BE",cat:"Materiales",catCls:"cat-materiales",costo:"$ 2.500",iva:"—",total:"$ 2.500",cf:"—",pago:"Tarjeta débito"},
-  {date:"09/12/2025",name:"Milan Fabjanovic SPA",rut:"81.548.400-2",tipo:"FA",cat:"Herramientas",catCls:"cat-herramientas",costo:"$ 49.520",iva:"$ 9.409",total:"$ 58.929",cf:"✔",pago:"Tarjeta débito"},
-  {date:"09/12/2025",name:"Sodimac S.A.",rut:"96.792.430-K",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 41.146",iva:"$ 7.818",total:"$ 48.964",cf:"✔",pago:"Tarjeta débito"},
-  {date:"10/12/2025",name:"Sodimac S.A.",rut:"96.792.430-K",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 58.174",iva:"$ 11.053",total:"$ 69.227",cf:"✔",pago:"Tarjeta débito"},
-  {date:"16/12/2025",name:"Ebema S.A.",rut:"83.585.400-0",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 2.550.169",iva:"$ 484.532",total:"$ 3.034.701",cf:"✔",pago:"Contado"},
-  {date:"17/12/2025",name:"Guillermo Eliseo Díaz Olave",rut:"10.789.987-1",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 1.287.500",iva:"$ 244.625",total:"$ 1.532.125",cf:"✔",pago:"Crédito"},
-  {date:"18/12/2025",name:"Sodimac S.A.",rut:"96.792.430-K",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 31.924",iva:"$ 6.066",total:"$ 37.990",cf:"✔",pago:"Tarjeta débito"},
-  {date:"20/12/2025",name:"Soc. Comercial Cabo de Hornos Ltda (Copec)",rut:"76.416.244-7",tipo:"BE",cat:"Transporte",catCls:"cat-transporte",costo:"$ 10.000",iva:"—",total:"$ 10.000",cf:"—",pago:"Tarjeta débito"},
-  {date:"22/12/2025",name:"Solusip SPA",rut:"76.874.595-1",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 4.924.370",iva:"$ 935.630",total:"$ 5.860.000",cf:"✔",pago:"Contado"},
-  {date:"23/12/2025",name:"Ferrital Ltda",rut:"78.045.980-8",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 17.342",iva:"$ 3.295",total:"$ 20.637",cf:"✔",pago:"Tarjeta débito"},
-  {date:"23/12/2025",name:"Hormigones Polpaico S.A.",rut:"76.084.154-4",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 2.678.760",iva:"$ 508.964",total:"$ 3.187.724",cf:"✔",pago:"Contado"},
-  {date:"23/12/2025",name:"Mi Viejo Roble SPA",rut:"76.893.512-2",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 8.235",iva:"$ 1.565",total:"$ 9.800",cf:"✔",pago:"Contado"},
-  {date:"23/12/2025",name:"Soc. Comercial Cabo de Hornos Ltda (Copec)",rut:"76.416.244-7",tipo:"BE",cat:"Transporte",catCls:"cat-transporte",costo:"$ 12.098",iva:"—",total:"$ 12.098",cf:"—",pago:"Tarjeta débito"},
-  {date:"25/12/2025",name:"Soc. Comercial Cabo de Hornos Ltda (Copec)",rut:"76.416.244-7",tipo:"BE",cat:"Transporte",catCls:"cat-transporte",costo:"$ 18.150",iva:"—",total:"$ 18.150",cf:"—",pago:"Tarjeta débito"},
-  {date:"26/12/2025",name:"Bosamaq SPA",rut:"77.073.449-5",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 60.000",iva:"$ 11.400",total:"$ 71.400",cf:"✔",pago:"Contado"},
-  {date:"26/12/2025",name:"Sodimac S.A.",rut:"96.792.430-K",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 90.342",iva:"$ 17.165",total:"$ 107.507",cf:"✔",pago:"Tarjeta débito"},
-  {date:"29/12/2025",name:"CSS Asesorías y Construcción Limitada",rut:"77.340.307-4",tipo:"FA",cat:"Mano de obra",catCls:"cat-mano",costo:"$ 10.714.034",iva:"$ 2.035.666",total:"$ 12.749.700",cf:"✔",pago:"Crédito"},
-  {date:"30/12/2025",name:"Ebema S.A.",rut:"83.585.400-0",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 3.065.981",iva:"$ 582.536",total:"$ 3.648.517",cf:"✔",pago:"Contado"},
-  {date:"30/12/2025",name:"Ferretería Industrial SyC Limitada",rut:"76.884.923-4",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 153.863",iva:"$ 29.234",total:"$ 183.097",cf:"✔",pago:"Tarjeta débito"},
-  {date:"30/12/2025",name:"Ferretería Industrial SyC Limitada",rut:"76.884.923-4",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 11.329",iva:"$ 2.153",total:"$ 13.482",cf:"✔",pago:"Tarjeta débito"},
-  {date:"30/12/2025",name:"Hormigones La Promesa SPA",rut:"77.539.021-2",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 185.546",iva:"$ 35.254",total:"$ 220.800",cf:"✔",pago:"Contado"},
-  {date:"30/12/2025",name:"RLB Construcciones SPA (Letmaq)",rut:"77.331.893-K",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 64.300",iva:"$ 12.217",total:"$ 76.517",cf:"✔",pago:"Crédito"},
-  {date:"31/12/2025",name:"Hormigones Polpaico S.A.",rut:"76.084.154-4",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 1.436.160",iva:"$ 272.870",total:"$ 1.709.030",cf:"✔",pago:"Contado"},
-  {date:"05/01/2026",name:"Soc. Comercial Cabo de Hornos Ltda (Copec)",rut:"76.416.244-7",tipo:"BE",cat:"Transporte",catCls:"cat-transporte",costo:"$ 25.460",iva:"—",total:"$ 25.460",cf:"—",pago:"Efectivo"},
-  {date:"05/01/2026",name:"Walmart Chile (Lider)",rut:"76.134.946-5",tipo:"BE",cat:"Materiales",catCls:"cat-materiales",costo:"$ 7.190",iva:"—",total:"$ 7.190",cf:"—",pago:"Tarjeta débito"},
-  {date:"06/01/2026",name:"Ebema S.A.",rut:"83.585.400-0",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 181.930",iva:"$ 34.567",total:"$ 216.497",cf:"✔",pago:"Contado"},
-  {date:"06/01/2026",name:"Sodimac S.A.",rut:"96.792.430-K",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 536.417",iva:"$ 101.919",total:"$ 638.336",cf:"✔",pago:"Tarjeta débito"},
-  {date:"07/01/2026",name:"Soc. Comercial Cabo de Hornos Ltda (Copec)",rut:"76.416.244-7",tipo:"BE",cat:"Transporte",catCls:"cat-transporte",costo:"$ 25.395",iva:"—",total:"$ 25.395",cf:"—",pago:"Tarjeta débito"},
-  {date:"08/01/2026",name:"Ferretería Las Rastras SPA",rut:"76.861.313-9",tipo:"BE",cat:"Materiales",catCls:"cat-materiales",costo:"$ 27.903",iva:"—",total:"$ 27.903",cf:"—",pago:"Red Compra débito"},
-  {date:"09/01/2026",name:"RLB Construcciones SPA (Letmaq)",rut:"77.331.893-K",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 38.000",iva:"$ 7.220",total:"$ 45.220",cf:"✔",pago:"Tarjeta débito"},
-  {date:"14/01/2026",name:"Mauricio Eugenio Nuñez Moreno",rut:"16.002.577-8",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 150.000",iva:"$ 28.500",total:"$ 178.500",cf:"✔",pago:"Contado"},
-  {date:"14/01/2026",name:"Oscar Atala y Ernesto Contreras Ltda (Ingethe",rut:"78.792.230-9",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 3.014.650",iva:"$ 572.784",total:"$ 3.587.434",cf:"✔",pago:"Contado"},
-  {date:"14/01/2026",name:"RLB Construcciones SPA (Letmaq)",rut:"77.331.893-K",tipo:"FA",cat:"Herramientas",catCls:"cat-herramientas",costo:"$ 19.000",iva:"$ 3.610",total:"$ 22.610",cf:"✔",pago:"Tarjeta débito"},
-  {date:"15/01/2026",name:"Aceros Talca S.A.",rut:"96.978.630-3",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 133.160",iva:"$ 25.300",total:"$ 158.460",cf:"✔",pago:"Contado"},
-  {date:"16/01/2026",name:"RLB Construcciones SPA (Letmaq)",rut:"77.331.893-K",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 19.000",iva:"$ 3.610",total:"$ 22.610",cf:"✔",pago:"Tarjeta débito"},
-  {date:"16/01/2026",name:"Soc. Comercial Cabo de Hornos Ltda (Copec)",rut:"76.416.244-7",tipo:"BE",cat:"Transporte",catCls:"cat-transporte",costo:"$ 23.685",iva:"—",total:"$ 23.685",cf:"—",pago:"Tarjeta débito"},
-  {date:"17/01/2026",name:"Mauricio Eugenio Nuñez Moreno",rut:"16.002.577-8",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 45.000",iva:"$ 8.550",total:"$ 53.550",cf:"✔",pago:"Contado"},
-  {date:"19/01/2026",name:"Easy Retail S.A.",rut:"76.568.660-1",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 51.806",iva:"$ 9.843",total:"$ 61.649",cf:"✔",pago:"Tarjeta débito"},
-  {date:"19/01/2026",name:"Formación de Aceros S.A.",rut:"95.672.000-1",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 4.204.131",iva:"$ 798.785",total:"$ 5.002.916",cf:"✔",pago:"Abono Cta. Corriente"},
-  {date:"20/01/2026",name:"RLB Construcciones SPA (Letmaq)",rut:"77.331.893-K",tipo:"FA",cat:"Herramientas",catCls:"cat-herramientas",costo:"$ 7.731",iva:"$ 1.469",total:"$ 9.200",cf:"✔",pago:"Tarjeta débito"},
-  {date:"20/01/2026",name:"Soc. Comercial Cabo de Hornos Ltda (Copec)",rut:"76.416.244-7",tipo:"BE",cat:"Transporte",catCls:"cat-transporte",costo:"$ 17.841",iva:"—",total:"$ 17.841",cf:"—",pago:"Tarjeta débito"},
-  {date:"20/01/2026",name:"Ferretería Las Rastras SPA",rut:"76.851.313-9",tipo:"FA",cat:"Herramientas",catCls:"cat-herramientas",costo:"$ 34.034",iva:"$ 6.466",total:"$ 40.500",cf:"✔",pago:"Red Compra débito"},
-  {date:"20/01/2026",name:"Hormigones Polpaico S.A.",rut:"76.084.154-4",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 1.616.382",iva:"$ 307.113",total:"$ 1.923.495",cf:"✔",pago:"Contado"},
-  {date:"21/01/2026",name:"Ferretería Las Rastras SPA",rut:"76.851.313-9",tipo:"FA",cat:"Herramientas",catCls:"cat-herramientas",costo:"$ 9.411",iva:"$ 1.788",total:"$ 11.199",cf:"✔",pago:"Red Compra débito"},
-  {date:"21/01/2026",name:"Ferretería Industrial SyC Limitada",rut:"76.884.923-4",tipo:"FA",cat:"Herramientas",catCls:"cat-herramientas",costo:"$ 8.249",iva:"$ 1.567",total:"$ 9.816",cf:"✔",pago:"Tarjeta débito"},
-  {date:"23/01/2026",name:"Solusip SPA",rut:"76.874.595-1",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 4.924.370",iva:"$ 935.630",total:"$ 5.860.000",cf:"✔",pago:"Contado"},
-  {date:"26/01/2026",name:"Soc. Comercial Cabo de Hornos Ltda (Copec)",rut:"76.416.244-7",tipo:"BE",cat:"Transporte",catCls:"cat-transporte",costo:"$ 18.601",iva:"—",total:"$ 18.601",cf:"—",pago:"Tarjeta débito"},
-  {date:"27/01/2026",name:"Oscar Atala y Ernesto Contreras Ltda (Ingethe",rut:"78.792.230-9",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 63.025",iva:"$ 11.975",total:"$ 75.000",cf:"✔",pago:"Contado"},
-  {date:"27/01/2026",name:"Easy Retail S.A.",rut:"76.568.660-1",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 7.578",iva:"$ 1.440",total:"$ 9.018",cf:"✔",pago:"Tarjeta débito"},
-  {date:"27/01/2026",name:"Ferretería Industrial SyC Limitada",rut:"76.884.923-4",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 37.624",iva:"$ 7.149",total:"$ 44.773",cf:"✔",pago:"Tarjeta débito"},
-  {date:"27/01/2026",name:"Ferretería Industrial SyC Limitada",rut:"76.884.923-4",tipo:"FA",cat:"Herramientas",catCls:"cat-herramientas",costo:"$ 7.165",iva:"$ 1.361",total:"$ 8.526",cf:"✔",pago:"Tarjeta débito"},
-  {date:"28/01/2026",name:"Acenor Aceros del Norte S.A.",rut:"77.660.960-9",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 367.772",iva:"$ 69.877",total:"$ 437.649",cf:"✔",pago:"Contado"},
-  {date:"28/01/2026",name:"RLB Construcciones SPA (Letmaq)",rut:"77.331.893-K",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 32.269",iva:"$ 6.131",total:"$ 38.400",cf:"✔",pago:"Tarjeta débito"},
-  {date:"29/01/2026",name:"Milan Fabjanovic SPA",rut:"81.548.400-2",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 6.202",iva:"$ 1.178",total:"$ 7.380",cf:"✔",pago:"Tarjeta débito"},
-  {date:"30/01/2026",name:"Ferretería Las Rastras SPA",rut:"76.851.313-9",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 8.655",iva:"$ 1.644",total:"$ 10.299",cf:"✔",pago:"Red Compra débito"},
-  {date:"30/01/2026",name:"Ferretería Las Rastras SPA",rut:"76.851.313-9",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 3.866",iva:"$ 735",total:"$ 4.601",cf:"✔",pago:"Red Compra débito"},
-  {date:"30/01/2026",name:"Terraquímica SPA",rut:"77.604.953-0",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 33.529",iva:"$ 6.371",total:"$ 39.900",cf:"✔",pago:"Mercado Pago"},
-  {date:"30/01/2026",name:"CSS Asesorías y Construcción Limitada",rut:"77.340.307-4",tipo:"FA",cat:"Mano de obra",catCls:"cat-mano",costo:"$ 7.679.691",iva:"$ 1.459.141",total:"$ 9.138.832",cf:"✔",pago:"Crédito"},
-  {date:"31/01/2026",name:"Mauricio Eugenio Nuñez Moreno",rut:"16.002.577-8",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 150.000",iva:"$ 28.500",total:"$ 178.500",cf:"✔",pago:"Contado"},
-  {date:"02/02/2026",name:"Guillermo Eliseo Díaz Olave",rut:"10.789.987-1",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 1.937.500",iva:"$ 368.125",total:"$ 2.305.625",cf:"✔",pago:"Crédito"},
-  {date:"09/02/2026",name:"Ferretería Las Rastras SPA",rut:"76.851.313-9",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 20.588",iva:"$ 3.912",total:"$ 24.500",cf:"✔",pago:"Red Compra débito"},
-  {date:"09/02/2026",name:"Ferretería Las Rastras SPA",rut:"76.851.313-9",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 16.471",iva:"$ 3.129",total:"$ 19.600",cf:"✔",pago:"Red Compra débito"},
-  {date:"09/02/2026",name:"Ferretería Talca SPA",rut:"76.390.027-4",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 21.765",iva:"$ 4.135",total:"$ 25.900",cf:"✔",pago:"Tarjeta débito"},
-  {date:"11/02/2026",name:"Ferretería Las Rastras SPA",rut:"76.851.313-9",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 11.429",iva:"$ 2.172",total:"$ 13.601",cf:"✔",pago:"Red Compra débito"},
-  {date:"11/02/2026",name:"Ferretería Las Rastras SPA",rut:"76.851.313-9",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 8.824",iva:"$ 1.677",total:"$ 10.501",cf:"✔",pago:"Red Compra débito"},
-  {date:"12/02/2026",name:"Easy Retail S.A.",rut:"76.568.660-1",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 24.246",iva:"$ 4.607",total:"$ 28.853",cf:"✔",pago:"Tarjeta débito"},
-  {date:"13/02/2026",name:"Ferretería Industrial SyC Limitada",rut:"76.884.923-4",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 207.338",iva:"$ 39.394",total:"$ 246.732",cf:"✔",pago:"Tarjeta débito"},
-  {date:"16/02/2026",name:"Soc. Comercial Betrental Ltda",rut:"77.040.509-2",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 300.000",iva:"$ 57.000",total:"$ 357.000",cf:"✔",pago:"Contado"},
-  {date:"17/02/2026",name:"Ebema S.A.",rut:"83.585.400-0",tipo:"GD",cat:"Materiales",catCls:"cat-materiales",costo:"$ 2.244.712",iva:"$ 426.495",total:"$ 2.671.207",cf:"✔",pago:"—"},
-  {date:"17/02/2026",name:"RLB Construcciones SPA (Letmaq)",rut:"77.331.893-K",tipo:"FA",cat:"Herramientas",catCls:"cat-herramientas",costo:"$ 10.000",iva:"$ 1.900",total:"$ 11.900",cf:"✔",pago:"Tarjeta débito"},
-  {date:"17/02/2026",name:"RLB Construcciones SPA (Letmaq)",rut:"77.331.893-K",tipo:"GD",cat:"Materiales",catCls:"cat-materiales",costo:"$ 1.600",iva:"$ 304",total:"$ 1.904",cf:"✔",pago:"Tarjeta débito"},
-  {date:"18/02/2026",name:"RLB Construcciones SPA (Letmaq)",rut:"77.331.893-K",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 4.800",iva:"$ 912",total:"$ 5.712",cf:"✔",pago:"Tarjeta débito"},
-  {date:"18/02/2026",name:"Easy Retail S.A.",rut:"76.134.946-5",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 5.193",iva:"$ 987",total:"$ 6.180",cf:"✔",pago:"Tarjeta débito"},
-  {date:"19/02/2026",name:"Ebema S.A.",rut:"83.585.400-0",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 485.230",iva:"$ 92.194",total:"$ 577.424",cf:"✔",pago:"Contado"},
-  {date:"19/02/2026",name:"Ferretería Industrial SyC Limitada",rut:"76.884.923-4",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 38.400",iva:"$ 7.296",total:"$ 45.696",cf:"✔",pago:"Tarjeta débito"},
-  {date:"20/02/2026",name:"Ebema S.A.",rut:"83.585.400-0",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 22.100",iva:"$ 4.199",total:"$ 26.299",cf:"✔",pago:"Contado"},
-  {date:"20/02/2026",name:"Sodimac S.A.",rut:"96.792.430-K",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 3.840",iva:"$ 730",total:"$ 4.570",cf:"✔",pago:"Tarjeta débito"},
-  {date:"20/02/2026",name:"Comercial Electricidad Talca Limitada",rut:"78.012.167-K",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 12.306",iva:"$ 2.338",total:"$ 14.644",cf:"✔",pago:"Tarjeta débito"},
-  {date:"20/02/2026",name:"Easy Retail S.A.",rut:"76.134.946-5",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 46.618",iva:"$ 8.857",total:"$ 55.475",cf:"✔",pago:"Tarjeta débito"},
-  {date:"20/02/2026",name:"RLB Construcciones SPA (Letmaq)",rut:"77.331.893-K",tipo:"FA",cat:"Herramientas",catCls:"cat-herramientas",costo:"$ 2.933",iva:"$ 557",total:"$ 3.490",cf:"✔",pago:"Tarjeta débito"},
-  {date:"20/02/2026",name:"Claudio Alberto Jara Caceres",rut:"12.691.163-3",tipo:"BE",cat:"Materiales",catCls:"cat-materiales",costo:"$ 10.500",iva:"—",total:"$ 10.500",cf:"—",pago:"Tarjeta débito"},
-  {date:"23/02/2026",name:"Sodimac S.A.",rut:"96.792.430-K",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 38.787",iva:"$ 7.369",total:"$ 46.156",cf:"✔",pago:"Tarjeta débito"},
-  {date:"23/02/2026",name:"Ferretería Las Rastras SPA",rut:"76.851.313-9",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 3.866",iva:"$ 735",total:"$ 4.601",cf:"✔",pago:"Red Compra débito"},
-  {date:"23/02/2026",name:"Comercial Electricidad Talca Limitada",rut:"78.012.167-K",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 24.000",iva:"$ 4.560",total:"$ 28.560",cf:"✔",pago:"Tarjeta débito"},
-  {date:"24/02/2026",name:"Facava Electricidad (Juan Cancino Garrido)",rut:"9.633.707-8",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 91.000",iva:"$ 17.290",total:"$ 108.290",cf:"✔",pago:"Tarjeta débito"},
-  {date:"24/02/2026",name:"Ferretería Industrial SyC Limitada",rut:"76.884.923-4",tipo:"FA",cat:"Herramientas",catCls:"cat-herramientas",costo:"$ 3.798",iva:"$ 722",total:"$ 4.520",cf:"✔",pago:"Tarjeta débito"},
-  {date:"26/02/2026",name:"Comercializadora Johann Hans Schwaner Pino EI",rut:"76.579.971-6",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 6.034",iva:"$ 1.146",total:"$ 7.180",cf:"✔",pago:"Tarjeta débito"},
-  {date:"27/02/2026",name:"CSS Asesorías y Construcción Limitada",rut:"77.340.307-4",tipo:"FA",cat:"Mano de obra",catCls:"cat-mano",costo:"$ 16.809.086",iva:"$ 3.193.726",total:"$ 20.002.812",cf:"✔",pago:"Crédito"},
-  {date:"27/02/2026",name:"Ferretería Industrial SyC Limitada",rut:"76.884.923-4",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 69.750",iva:"$ 13.253",total:"$ 83.003",cf:"✔",pago:"Tarjeta débito"},
-  {date:"16/03/2026",name:"Hojalatería Talk-Tec SPA",rut:"77.570.212-5",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 453.782",iva:"$ 86.219",total:"$ 540.001",cf:"✔",pago:"Contado"},
-  {date:"25/03/2026",name:"Bosamaq SPA",rut:"77.073.449-5",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 460.000",iva:"$ 87.400",total:"$ 547.400",cf:"✔",pago:"Crédito"},
-  {date:"31/03/2026",name:"Hormigones Polpaico S.A.",rut:"76.084.154-4",tipo:"FA",cat:"Materiales",catCls:"cat-materiales",costo:"$ 1.733.915",iva:"$ 329.444",total:"$ 2.063.359",cf:"✔",pago:"Contado"},
-  {date:"01/04/2026",name:"Guillermo Eliseo Díaz Olave",rut:"10.789.987-1",tipo:"FA",cat:"Servicios",catCls:"cat-servicios",costo:"$ 1.775.000",iva:"$ 337.250",total:"$ 2.112.250",cf:"✔",pago:"Crédito"}
-];
+/* ── GASTOS ─────────────────────────────────────────────────
+   Los gastos reales se cargan desde Supabase:
+   public.gastos_junquillar_app
+
+   Columnas esperadas en Supabase:
+   fecha, proveedor, rut, tipo_documento, numero_documento, iva, total,
+   metodo_pago, proyecto, observacion, foto_url, estado_ocr, neto,
+   categoria, foto_path
+
+   Si Supabase no está configurado o falla, la tabla queda vacía
+   y la app no se rompe.
+────────────────────────────────────────────────────────────── */
+const docs = [];
+let supabaseStatus = {
+  connected: false,
+  loading: false,
+  error: null
+};
+
+function formatoCLP(valor) {
+  if (valor === null || valor === undefined || valor === "") return "—";
+  const numero = Number(valor);
+  if (Number.isNaN(numero)) return "—";
+
+  return numero.toLocaleString("es-CL", {
+    style: "currency",
+    currency: "CLP",
+    maximumFractionDigits: 0
+  });
+}
+
+function formatoFechaCL(fecha) {
+  if (!fecha) return "—";
+
+  // Si viene como YYYY-MM-DD desde Supabase.
+  if (/^\d{4}-\d{2}-\d{2}/.test(String(fecha))) {
+    const [yyyy, mm, dd] = String(fecha).slice(0, 10).split("-");
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  return String(fecha);
+}
+
+function parseMontoCLP(valorFormateado) {
+  if (!valorFormateado || valorFormateado === "—") return 0;
+  return Number(String(valorFormateado).replace(/[^0-9-]/g, "")) || 0;
+}
+
+function getCategoriaClass(categoria = "") {
+  const cat = String(categoria || "").toLowerCase();
+
+  if (cat.includes("material")) return "cat-materiales";
+  if (cat.includes("mano")) return "cat-mano";
+  if (cat.includes("servicio")) return "cat-servicios";
+  if (cat.includes("herramienta")) return "cat-herramientas";
+  if (cat.includes("transporte")) return "cat-transporte";
+  if (cat.includes("aliment")) return "cat-servicios";
+
+  return "cat-otros";
+}
+
+function normalizarTipoDocumento(tipo = "") {
+  const t = String(tipo || "").toLowerCase();
+
+  if (t.includes("factura") || t === "fa") return "FA";
+  if (t.includes("guía") || t.includes("guia") || t === "gd") return "GD";
+  if (t.includes("boleta") || t === "be") return "BE";
+
+  return tipo || "—";
+}
+
+function mapSupabaseGastoToDoc(gasto) {
+  const ivaNumero = Number(gasto.iva || 0);
+  const netoNumero = Number(gasto.neto || 0);
+  const totalNumero = Number(gasto.total || 0);
+
+  return {
+    id: gasto.id,
+    date: formatoFechaCL(gasto.fecha),
+    fechaISO: gasto.fecha || "",
+    name: gasto.proveedor || "Pendiente OCR",
+    rut: gasto.rut || "—",
+    tipo: normalizarTipoDocumento(gasto.tipo_documento),
+    numero: gasto.numero_documento || "—",
+    cat: gasto.categoria || "Sin categoría",
+    catCls: getCategoriaClass(gasto.categoria),
+    costo: formatoCLP(netoNumero),
+    iva: formatoCLP(ivaNumero),
+    total: formatoCLP(totalNumero),
+    cf: ivaNumero > 0 ? "✔" : "—",
+    pago: gasto.metodo_pago || "—",
+    proyecto: gasto.proyecto || "Junquillar",
+    observacion: gasto.observacion || "",
+    estadoOcr: gasto.estado_ocr || "pendiente",
+    fotoUrl: gasto.foto_url || null,
+    fotoPath: gasto.foto_path || null,
+    createdAt: gasto.created_at || null
+  };
+}
+
+async function cargarGastosDesdeSupabase() {
+  if (typeof supabaseClient === "undefined") {
+    console.warn("Supabase no está configurado. Revisa supabaseClient.js.");
+    supabaseStatus = {
+      connected: false,
+      loading: false,
+      error: "Supabase no configurado"
+    };
+    renderDocs(3);
+    return;
+  }
+
+  supabaseStatus = {
+    connected: false,
+    loading: true,
+    error: null
+  };
+
+  const { data, error } = await supabaseClient
+    .from("gastos_junquillar_app")
+    .select("*")
+    .eq("proyecto", "Junquillar")
+    .order("fecha", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error cargando gastos desde Supabase:", error);
+    supabaseStatus = {
+      connected: false,
+      loading: false,
+      error: error.message || "Error Supabase"
+    };
+    renderDocs(3);
+    return;
+  }
+
+  docs.length = 0;
+  docs.push(...(data || []).map(mapSupabaseGastoToDoc));
+
+  filteredDocs = [...docs];
+
+  supabaseStatus = {
+    connected: true,
+    loading: false,
+    error: null
+  };
+
+  actualizarKPIsDesdeDocs();
+
+  const activeView = document.querySelector(".nav-btn.active")?.dataset.view || "resumen";
+  renderDocs(activeView === "gastos" ? 10 : 3);
+}
+
+function actualizarKPIsDesdeDocs() {
+  const totalNeto = docs.reduce((acc, d) => acc + parseMontoCLP(d.costo), 0);
+  const totalIva = docs.reduce((acc, d) => acc + parseMontoCLP(d.iva), 0);
+  const totalActivo = totalNeto + totalIva;
+  const docsConCF = docs.filter(d => d.cf === "✔").length;
+  const avance = totalNeto > 0 ? Math.min((totalNeto / 180000000) * 100, 100) : 0;
+
+  kpis[0] = {
+    title: "Inversión total (Costo Neto)",
+    value: formatoCLP(totalNeto),
+    delta: `↑ ${avance.toFixed(1).replace(".", ",")}%`,
+    type: "up",
+    footer: `${docs.length} documentos cargados desde Supabase`
+  };
+
+  kpis[1] = {
+    title: "IVA Crédito Fiscal",
+    value: formatoCLP(totalIva),
+    delta: docsConCF > 0 ? `↑ ${docsConCF}` : "—",
+    type: "up",
+    footer: `${docsConCF} docs con IVA CF recuperable`
+  };
+
+  kpis[2] = {
+    title: "Total Activo Contable",
+    value: formatoCLP(totalActivo),
+    delta: "↑ 0,0%",
+    type: "up",
+    footer: "Obra en Curso + IVA CF"
+  };
+
+  kpis[3] = {
+    title: "Documentos registrados",
+    value: `${docs.length} docs`,
+    delta: "Supabase",
+    type: "up",
+    footer: "Tabla gastos_junquillar_app"
+  };
+
+  renderKPIs();
+}
 
 /* ── PROVEEDORES ──────────────────────────────────────────── */
 const proveedores = [
@@ -240,6 +332,34 @@ function renderDocsRows() {
   const sub = document.getElementById("docs-subtitle");
   if (!el) return;
   const visible = filteredDocs.slice(0, docsVisible);
+
+  if (!filteredDocs.length) {
+    const mensaje = supabaseStatus.error
+      ? `No se pudieron cargar gastos desde Supabase: ${supabaseStatus.error}`
+      : "No hay gastos cargados todavía. Sube registros a Supabase para verlos aquí.";
+
+    el.innerHTML = `
+      <div class="table-row gastos-row">
+        <div class="doc-date">—</div>
+        <div class="doc-name">${mensaje}</div>
+        <div class="doc-rut">—</div>
+        <div class="doc-tipo">—</div>
+        <div><span class="cat-badge cat-otros">Sin datos</span></div>
+        <div class="doc-amount">—</div>
+        <div class="doc-amount">—</div>
+        <div class="doc-amount">—</div>
+        <div class="doc-cf">—</div>
+        <div class="doc-pago">—</div>
+        <div class="doc-actions">—</div>
+      </div>
+    `;
+    if (sub) sub.textContent = supabaseStatus.loading
+      ? "Cargando registros desde Supabase..."
+      : "0 registros · Sin datos cargados";
+    if (btn) btn.style.display = "none";
+    return;
+  }
+
   el.innerHTML = visible.map(d => `
     <div class="table-row gastos-row">
       <div class="doc-date">${d.date}</div>
@@ -257,7 +377,12 @@ function renderDocsRows() {
         <button class="action-btn" title="Eliminar">🗑️</button>
       </div>
     </div>`).join("");
-  if (sub) sub.textContent = `${filteredDocs.length} registros · FA = Factura Afecta · GD = Guía de Despacho · BE = Boleta Exenta`;
+
+  if (sub) {
+    const origen = supabaseStatus.connected ? "Supabase" : "local";
+    sub.textContent = `${filteredDocs.length} registros · Origen: ${origen} · FA = Factura Afecta · GD = Guía de Despacho · BE = Boleta Exenta`;
+  }
+
   if (btn) btn.style.display = docsVisible >= filteredDocs.length ? "none" : "inline-flex";
 }
 
@@ -278,19 +403,50 @@ function renderDocs(initialCount) {
 }
 
 function applyFilters() {
-  const txt   = (document.getElementById("filter-text")?.value || "").toLowerCase();
-  const cat   = document.getElementById("filter-cat")?.value  || "";
-  const tipo  = document.getElementById("filter-tipo")?.value || "";
-  const pago  = document.getElementById("filter-pago")?.value || "";
-  const desde = document.getElementById("filter-desde")?.value || "";
-  const hasta = document.getElementById("filter-hasta")?.value || "";
+  const txt = (
+    document.getElementById("filter-text")?.value ||
+    document.getElementById("filter-text-gastos")?.value ||
+    ""
+  ).toLowerCase();
+
+  const cat = (
+    document.getElementById("filter-cat")?.value ||
+    document.getElementById("filter-cat-gastos")?.value ||
+    ""
+  );
+
+  const tipo = (
+    document.getElementById("filter-tipo")?.value ||
+    document.getElementById("filter-tipo-gastos")?.value ||
+    ""
+  );
+
+  const pago = document.getElementById("filter-pago")?.value || "";
+
+  const desde = (
+    document.getElementById("filter-desde")?.value ||
+    document.getElementById("filter-desde-gastos")?.value ||
+    ""
+  );
+
+  const hasta = (
+    document.getElementById("filter-hasta")?.value ||
+    document.getElementById("filter-hasta-gastos")?.value ||
+    ""
+  );
   filteredDocs = docs.filter(d => {
-    if (txt  && !d.name.toLowerCase().includes(txt) && !d.rut.includes(txt)) return false;
-    if (cat  && d.cat  !== cat)  return false;
-    if (tipo && d.tipo !== tipo) return false;
-    if (pago && d.pago !== pago) return false;
-    if (desde && d.date < desde.split("-").reverse().join("/")) return false;
-    if (hasta && d.date > hasta.split("-").reverse().join("/")) return false;
+    const name = String(d.name || "").toLowerCase();
+    const rut = String(d.rut || "").toLowerCase();
+    const categoria = String(d.cat || "");
+    const tipoDoc = String(d.tipo || "");
+    const metodo = String(d.pago || "");
+
+    if (txt && !name.includes(txt) && !rut.includes(txt)) return false;
+    if (cat && categoria !== cat) return false;
+    if (tipo && tipoDoc !== tipo) return false;
+    if (pago && metodo !== pago) return false;
+    if (desde && d.fechaISO && d.fechaISO < desde) return false;
+    if (hasta && d.fechaISO && d.fechaISO > hasta) return false;
     return true;
   });
   docsVisible = 10;
@@ -298,97 +454,13 @@ function applyFilters() {
 }
 
 function clearFilters() {
-  ["filter-text","filter-cat","filter-tipo","filter-pago","filter-desde","filter-hasta"]
-    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+  [
+    "filter-text","filter-cat","filter-tipo","filter-pago","filter-desde","filter-hasta",
+    "filter-text-gastos","filter-cat-gastos","filter-tipo-gastos","filter-desde-gastos","filter-hasta-gastos"
+  ].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
   filteredDocs = [...docs];
   docsVisible = 3;
   renderDocsRows();
-}
-
-
-/* ── SUPABASE: GASTOS REALES ──────────────────────────────── */
-function formatoCLP(valor) {
-  if (valor === null || valor === undefined || valor === "") return "—";
-  const numero = Number(valor);
-  if (Number.isNaN(numero)) return "—";
-  return numero.toLocaleString("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0
-  });
-}
-
-function formatFechaSupabase(fecha) {
-  if (!fecha) return "—";
-  const partes = String(fecha).split("-");
-  if (partes.length === 3) return partes[2] + "/" + partes[1] + "/" + partes[0];
-  return fecha;
-}
-
-function getCategoriaClass(categoria = "") {
-  const cat = String(categoria || "").toLowerCase();
-  if (cat.includes("material")) return "cat-materiales";
-  if (cat.includes("mano")) return "cat-mano";
-  if (cat.includes("servicio")) return "cat-servicios";
-  if (cat.includes("herramienta")) return "cat-herramientas";
-  if (cat.includes("transporte")) return "cat-transporte";
-  return "cat-otros";
-}
-
-function mapSupabaseGastoToDoc(gasto) {
-  return {
-    id: gasto.id,
-    date: formatFechaSupabase(gasto.fecha),
-    name: gasto.proveedor || "Pendiente OCR",
-    rut: gasto.rut || "—",
-    tipo: gasto.tipo_documento || "—",
-    numero: gasto.numero_documento || "—",
-    cat: gasto.categoria || "Sin categoría",
-    catCls: getCategoriaClass(gasto.categoria),
-    costo: formatoCLP(gasto.neto),
-    iva: formatoCLP(gasto.iva),
-    total: formatoCLP(gasto.total),
-    cf: Number(gasto.iva || 0) > 0 ? "✔" : "—",
-    pago: gasto.metodo_pago || "—",
-    estadoOcr: gasto.estado_ocr || "pendiente",
-    fotoPath: gasto.foto_path || null,
-    observacion: gasto.observacion || ""
-  };
-}
-
-function getActiveView() {
-  return document.querySelector(".nav-btn.active")?.dataset?.view || "resumen";
-}
-
-async function cargarGastosDesdeSupabase() {
-  if (typeof supabaseClient === "undefined") {
-    console.warn("Supabase no está configurado. Usando datos locales.");
-    return;
-  }
-
-  const { data, error } = await supabaseClient
-    .from("gastos_junquillar_app")
-    .select("*")
-    .eq("proyecto", "Junquillar")
-    .order("fecha", { ascending: false })
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Error cargando gastos desde Supabase:", error);
-    return;
-  }
-
-  if (!data || data.length === 0) {
-    console.warn("Supabase no devolvió registros. Se mantienen datos locales.");
-    return;
-  }
-
-  docs.length = 0;
-  docs.push(...data.map(mapSupabaseGastoToDoc));
-  filteredDocs = [...docs];
-
-  const activeView = getActiveView();
-  renderDocs(activeView === "gastos" ? 10 : 3);
 }
 
 /* ── RENDER CONTROL DE PROYECTO ───────────────────────────── */
