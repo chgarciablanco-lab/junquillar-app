@@ -585,39 +585,140 @@ function renderCajaMensual(){
   el.innerHTML=Object.entries(groups).sort(([a],[b])=>a.localeCompare(b)).map(([mes,rows])=>{ const iva=sumBy(rows,"iva"); acum+=iva; return `<div class="table-row caja-mensual-row"><div>${mes}</div><div>${rows.filter(r=>numberValue(r.iva)>0).length}</div><div>${formatoCLP(sumBy(rows,"neto"))}</div><div>${formatoCLP(iva)}</div><div>${formatoCLP(acum)}</div></div>`; }).join("");
 }
 function renderBalance(){
-  const el=$("balance-table"); if(!el) return;
+  const el = $("balance-table");
+  if(!el) return;
   const t = getTotals();
-  if(!gastos.length){ el.innerHTML=emptyState("Balance sin movimientos. No hay gastos registrados."); return; }
+  if(!gastos.length){
+    el.innerHTML = emptyState("Balance sin movimientos. No hay gastos registrados.");
+    return;
+  }
 
-  // Constantes fijas del proyecto
-  const TERRENO          = 100000000;
-  const APORTE_SOCIO     =  60000000;
-  const totalActivos     = TERRENO + t.neto + t.iva;   // Terreno + Obra en Curso + IVA CF
-  const totalPasivos     = APORTE_SOCIO + t.total;     // Cuenta por pagar socio + Gastos por pagar
+  // ── Constantes fijas ────────────────────────────────────────
+  const TERRENO      = 100000000;
+  const APORTE_SOCIO =  60000000;
 
-  // Formato columnas: N° | Cuenta | DEBE | HABER | DEUDOR | ACREEDOR | ACTIVO | PASIVO | PÉRDIDA | GANANCIA
-  // [n, cuenta, debe, haber, deudor, acreedor, activo, pasivo, perdida, ganancia]
-  const rows = [
-    // ACTIVOS
-    ["1", "Terreno (Valor de adquisición)",  TERRENO,  0,        TERRENO,  0,       TERRENO,  0,        0, 0],
-    ["2", "Obra en Curso (Costos netos)",     t.neto,   0,        t.neto,   0,       t.neto,   0,        0, 0],
-    ["3", "IVA Crédito Fiscal",               t.iva,    0,        t.iva,    0,       t.iva,    0,        0, 0],
-    // PASIVOS
-    ["4", "Cuenta por pagar al Socio",        0,        APORTE_SOCIO,   0,  APORTE_SOCIO,  0,  APORTE_SOCIO, 0, 0],
-    ["5", "Gastos por pagar / Financiamiento",0,        t.total,  0,        t.total, 0,        t.total,  0, 0],
-    // TOTALES
-    ["" , "TOTAL",                             totalActivos, totalPasivos, totalActivos, totalPasivos, totalActivos, totalPasivos, 0, 0]
-  ];
+  // ── Cálculos contables ──────────────────────────────────────
+  // ACTIVOS
+  const activoTerreno = TERRENO;
+  const activoObra    = t.neto;
+  const activoIvaCF   = t.iva;
+  const totalActivo   = activoTerreno + activoObra + activoIvaCF;
 
-  const isTotal = r => r[0] === "";
-  el.innerHTML = rows.map(r => {
-    const cls = isTotal(r) ? "table-row balance-row balance-total" : "table-row balance-row";
-    return `<div class="${cls}"><div>${r[0]}</div><div class="doc-name">${r[1]}</div><div>${formatoCLP(r[2])}</div><div>${formatoCLP(r[3])}</div><div>${formatoCLP(r[4])}</div><div>${formatoCLP(r[5])}</div><div>${formatoCLP(r[6])}</div><div>${formatoCLP(r[7])}</div><div>${formatoCLP(r[8])}</div><div>${formatoCLP(r[9])}</div></div>`;
-  }).join("");
+  // PASIVOS
+  // La cuenta por pagar al socio financia el terreno ($100M) y parte de la obra.
+  // Gastos por pagar = total bruto de documentos (neto + IVA).
+  // Para cuadrar: total DEBE = total HABER
+  //   DEBE  = Terreno + Obra + IVA CF = totalActivo
+  //   HABER = Aporte Socio + Gastos por pagar
+  // Gastos por pagar = totalActivo - APORTE_SOCIO
+  const pasivoSocio   = APORTE_SOCIO;
+  const pasivoGastos  = t.total;   // documentos registrados
+  const totalPasivo   = pasivoSocio + pasivoGastos;
 
-  // Nota al pie
-  el.insertAdjacentHTML("afterend", `<div class="balance-note">⚠️ Valores calculados automáticamente desde documentos registrados. No reemplaza balance formal.</div>`);
+  // Para cuadre perfecto el DEBE total debe ser igual al HABER total
+  // DEBE: Terreno + Obra + IVA = totalActivo
+  // HABER: Socio + Gastos = totalPasivo
+  // Diferencia → va a "Patrimonio / Capital pendiente" si existe
+  const diferencia = totalActivo - totalPasivo;
+
+  const clp = v => formatoCLP(v);
+  const z   = () => `<span style="color:#94a3b8">$0</span>`;
+
+  const cell = (v, color) => {
+    if(!v || v === 0) return z();
+    const s = clp(v);
+    return color ? `<span style="color:${color};font-weight:600">${s}</span>` : s;
+  };
+
+  // ── Fila normal ──────────────────────────────────────────────
+  // cols: N° | Cuenta | DEBE | HABER | DEUDOR | ACREEDOR | ACTIVO | PASIVO | PÉRDIDA | GANANCIA
+  const row = (n, cuenta, debe, haber, deudor, acreedor, activo, pasivo, perdida, ganancia, extra="") =>
+    `<div class="bal-row${extra}">
+      <div class="bal-n">${n}</div>
+      <div class="bal-cuenta">${cuenta}</div>
+      <div class="bal-num">${cell(debe)}</div>
+      <div class="bal-num">${cell(haber)}</div>
+      <div class="bal-num">${cell(deudor)}</div>
+      <div class="bal-num">${cell(acreedor)}</div>
+      <div class="bal-num">${cell(activo, "#059669")}</div>
+      <div class="bal-num">${cell(pasivo)}</div>
+      <div class="bal-num">${cell(perdida, "#e11d48")}</div>
+      <div class="bal-num">${cell(ganancia, "#059669")}</div>
+    </div>`;
+
+  const secHead = label =>
+    `<div class="bal-section">${label}</div>`;
+
+  el.innerHTML = `
+    <div class="bal-wrap">
+
+      <div class="bal-group-head">
+        <div class="bal-gh-spacer"></div>
+        <div class="bal-gh-group">MOVIMIENTOS</div>
+        <div class="bal-gh-group">SALDOS</div>
+        <div class="bal-gh-group">BALANCE</div>
+        <div class="bal-gh-group">RESULTADOS</div>
+      </div>
+
+      <div class="bal-col-head">
+        <div class="bal-n">N°</div>
+        <div class="bal-cuenta">Cuenta</div>
+        <div class="bal-num">DEBE</div>
+        <div class="bal-num">HABER</div>
+        <div class="bal-num">DEUDOR</div>
+        <div class="bal-num">ACREEDOR</div>
+        <div class="bal-num">ACTIVO</div>
+        <div class="bal-num">PASIVO</div>
+        <div class="bal-num">PÉRDIDA</div>
+        <div class="bal-num">GANANCIA</div>
+      </div>
+
+      ${secHead("ACTIVOS")}
+      ${row("1", "Terreno (Valor de adquisición)",
+          activoTerreno, 0, activoTerreno, 0, activoTerreno, 0, 0, 0)}
+      ${row("2", "Obra en Curso (Costos netos)",
+          activoObra, 0, activoObra, 0, activoObra, 0, 0, 0)}
+      ${row("3", "IVA Crédito Fiscal",
+          activoIvaCF, 0, activoIvaCF, 0, activoIvaCF, 0, 0, 0)}
+
+      ${secHead("PASIVOS")}
+      ${row("4", "Cuenta por pagar al Socio",
+          0, pasivoSocio, 0, pasivoSocio, 0, pasivoSocio, 0, 0)}
+      ${row("5", "Gastos por pagar / Cuentas por pagar",
+          0, pasivoGastos, 0, pasivoGastos, 0, pasivoGastos, 0, 0)}
+      ${diferencia !== 0 ? row("6",
+          diferencia > 0 ? "Capital / Patrimonio pendiente" : "Ajuste por diferencia",
+          diferencia > 0 ? diferencia : 0,
+          diferencia < 0 ? Math.abs(diferencia) : 0,
+          diferencia > 0 ? diferencia : 0,
+          diferencia < 0 ? Math.abs(diferencia) : 0,
+          0, 0,
+          diferencia < 0 ? Math.abs(diferencia) : 0,
+          diferencia > 0 ? diferencia : 0) : ""}
+
+      <div class="bal-row bal-total">
+        <div class="bal-n"></div>
+        <div class="bal-cuenta">TOTAL</div>
+        <div class="bal-num">${clp(totalActivo)}</div>
+        <div class="bal-num">${clp(totalPasivo + (diferencia > 0 ? diferencia : 0))}</div>
+        <div class="bal-num">${clp(totalActivo)}</div>
+        <div class="bal-num">${clp(totalPasivo + (diferencia > 0 ? diferencia : 0))}</div>
+        <div class="bal-num">${clp(totalActivo)}</div>
+        <div class="bal-num">${clp(totalPasivo)}</div>
+        <div class="bal-num">$0</div>
+        <div class="bal-num">$0</div>
+      </div>
+
+    </div>
+  `;
+
+  const prevNote = el.parentElement.querySelector(".balance-note");
+  if(prevNote) prevNote.remove();
+  el.insertAdjacentHTML("afterend",
+    `<div class="balance-note">⚠️ Valores calculados automáticamente desde documentos registrados. No reemplaza revisión contable formal.</div>`
+  );
 }
+
 function renderControlProyecto(){ renderControlKpis(); renderControlEtapas(); renderControlHitos(); renderControlCat(); }
 function renderControlKpis(){
   const el=$("control-kpis"); if(!el) return; const t=getTotals(); const avance = PROJECT_BUDGET ? (t.neto/PROJECT_BUDGET)*100 : 0;
