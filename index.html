@@ -145,8 +145,15 @@
               <button class="export-btn export-btn-xl" id="btn-export-excel">⬇ Excel</button>
             </div>
           </div>
+          <!-- Barra selección masiva (se muestra solo al seleccionar) -->
+          <div id="bulk-bar" class="bulk-bar bulk-bar-hidden">
+            <span id="bulk-count" class="bulk-count">0 seleccionados</span>
+            <button class="bulk-delete-btn" id="btn-bulk-delete">🗑️ Eliminar seleccionados</button>
+            <button class="bulk-cancel-btn" id="btn-bulk-cancel">✕ Cancelar</button>
+          </div>
           <div class="table-wrap" style="overflow-x:auto">
             <div class="table-head gastos-head">
+              <div><input type="checkbox" id="chk-all" title="Seleccionar todos"/></div>
               <div>Fecha</div><div>Proveedor</div><div>RUT</div><div>Tipo</div>
               <div>Categoría</div><div>Costo Neto</div><div>IVA CF</div>
               <div>Total Doc.</div><div>CF?</div><div>Método Pago</div><div>Acc.</div>

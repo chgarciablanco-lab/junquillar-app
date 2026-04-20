@@ -703,9 +703,9 @@ svg { display: inline-block; vertical-align: middle; }
 }
 .modal-btn-save:hover { background: #047857; }
 
-/* ── GASTOS TABLE — acciones alineadas ───────────────────── */
+/* ── GASTOS TABLE — con columna checkbox ─────────────────── */
 .gastos-head, .gastos-row {
-  grid-template-columns: .7fr 1.5fr .85fr .5fr .9fr .85fr .75fr .85fr .3fr .8fr .55fr !important;
+  grid-template-columns: 36px .7fr 1.5fr .85fr .5fr .9fr .85fr .75fr .85fr .3fr .8fr .55fr !important;
 }
 .doc-actions { display: flex; gap: 4px; align-items: center; }
 .action-btn {
@@ -716,6 +716,42 @@ svg { display: inline-block; vertical-align: middle; }
   line-height: 1;
 }
 .action-btn:hover { opacity: 1; background: #f1f5f9; }
+
+/* Fila seleccionada */
+.row-selected { background: #f0fdf4 !important; }
+.row-selected:hover { background: #dcfce7 !important; }
+
+/* Checkbox estilo limpio */
+.row-chk, #chk-all {
+  width: 15px; height: 15px; cursor: pointer;
+  accent-color: #059669;
+}
+
+/* ── BARRA SELECCIÓN MASIVA ──────────────────────────────── */
+.bulk-bar {
+  display: flex; align-items: center; gap: 12px;
+  background: #0f172a; color: #fff;
+  border-radius: 12px; padding: 10px 16px;
+  margin: 10px 0 12px;
+  transition: all .2s ease;
+  flex-wrap: wrap;
+}
+.bulk-bar-hidden { display: none !important; }
+.bulk-count { font-size: 13px; font-weight: 600; flex: 1; }
+.bulk-delete-btn {
+  background: #e11d48; color: #fff; border: none;
+  border-radius: 8px; padding: 7px 14px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background .15s;
+}
+.bulk-delete-btn:hover { background: #be123c; }
+.bulk-cancel-btn {
+  background: rgba(255,255,255,.12); color: #fff; border: none;
+  border-radius: 8px; padding: 7px 12px;
+  font-size: 13px; cursor: pointer;
+  transition: background .15s;
+}
+.bulk-cancel-btn:hover { background: rgba(255,255,255,.22); }
 
 /* ── PRESUPUESTO EDITABLE ────────────────────────────────── */
 .budget-edit-row {

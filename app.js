@@ -193,9 +193,31 @@ function renderBottomCards(){
 }
 
 /* ── GASTOS TABLE ─────────────────────────────────────────── */
-function gastoRowHTML(g, fotoUrl){
+let selectedIds = new Set();
+
+function updateBulkBar(){
+  const bar=$("bulk-bar"), count=$("bulk-count");
+  if(!bar)return;
+  if(selectedIds.size>0){
+    bar.classList.remove("bulk-bar-hidden");
+    if(count) count.textContent=`${selectedIds.size} seleccionado${selectedIds.size!==1?"s":""}`;
+  } else {
+    bar.classList.add("bulk-bar-hidden");
+  }
+  // Actualizar checkbox "seleccionar todo"
+  const chkAll=$("chk-all");
+  if(chkAll){
+    const slice=filteredDocs.slice(0,docsVisibleLimit);
+    chkAll.checked = slice.length>0 && slice.every(g=>selectedIds.has(String(g.id)));
+    chkAll.indeterminate = !chkAll.checked && slice.some(g=>selectedIds.has(String(g.id)));
+  }
+}
+
+function gastoRowHTML(g){
   const safeNombre=(g.proveedor||"").replace(/'/g,"\\'").replace(/"/g,"&quot;");
-  return`<div class="table-row gastos-row">
+  const checked=selectedIds.has(String(g.id))?"checked":"";
+  return`<div class="table-row gastos-row${checked?" row-selected":""}" data-id="${g.id}">
+    <div><input type="checkbox" class="row-chk" data-id="${g.id}" ${checked} onclick="toggleRowSelect('${g.id}',this)"/></div>
     <div>${normalizarFecha(g.fecha)}</div>
     <div><div class="doc-name">${g.proveedor||"Pendiente OCR"}</div><div class="doc-amount">${g.observacion||""}</div></div>
     <div style="font-size:11px;color:#94a3b8">${g.rut||"—"}</div>
@@ -217,16 +239,63 @@ function gastoRowHTML(g, fotoUrl){
 async function renderDocs(limit=docsVisibleLimit){
   const el=$("docs-table"),sub=$("docs-subtitle"),btn=$("load-more-btn");if(!el)return;
   if(sub)sub.textContent=`${filteredDocs.length} registros · datos cargados desde Supabase`;
-  if(!filteredDocs.length){el.innerHTML=emptyState("No hay gastos registrados.");if(btn)btn.style.display="none";return;}
+  if(!filteredDocs.length){el.innerHTML=emptyState("No hay gastos registrados.");if(btn)btn.style.display="none";updateBulkBar();return;}
   const slice=filteredDocs.slice(0,limit);
-  el.innerHTML=slice.map(g=>gastoRowHTML(g,null)).join("");
+  el.innerHTML=slice.map(g=>gastoRowHTML(g)).join("");
   if(btn)btn.style.display=filteredDocs.length>limit?"inline-flex":"none";
-  // Cargar URLs firmadas de forma asíncrona para cada fila con foto
-  el.querySelectorAll(".foto-btn").forEach(async btn2=>{
-    const path=btn2.dataset.path;if(!path)return;
+  updateBulkBar();
+  // Cargar URLs firmadas async
+  el.querySelectorAll(".foto-btn").forEach(async b=>{
+    const path=b.dataset.path;if(!path)return;
     const url=await getFotoUrl(path);
-    if(url){ btn2.style.opacity="1"; btn2.style.cursor="pointer"; btn2.onclick=()=>window.open(url,"_blank"); }
+    if(url){b.style.opacity="1";b.style.cursor="pointer";b.onclick=()=>window.open(url,"_blank");}
   });
+}
+
+function toggleRowSelect(id, chk){
+  if(chk.checked) selectedIds.add(String(id));
+  else selectedIds.delete(String(id));
+  // Actualizar clase visual de la fila
+  const row=document.querySelector(`.gastos-row[data-id="${id}"]`);
+  if(row) row.classList.toggle("row-selected", chk.checked);
+  updateBulkBar();
+}
+
+function toggleSelectAll(chk){
+  const slice=filteredDocs.slice(0,docsVisibleLimit);
+  slice.forEach(g=>{
+    if(chk.checked) selectedIds.add(String(g.id));
+    else selectedIds.delete(String(g.id));
+  });
+  renderDocs(docsVisibleLimit);
+}
+
+function cancelBulkSelection(){
+  selectedIds.clear();
+  renderDocs(docsVisibleLimit);
+}
+
+async function bulkDelete(){
+  if(selectedIds.size===0)return;
+  if(!confirm(`¿Eliminar ${selectedIds.size} gasto${selectedIds.size!==1?"s":""}?\nEsta acción no se puede deshacer.`))return;
+  if(typeof window.supabaseClient==="undefined"){alert("Sin conexión.");return;}
+  const ids=[...selectedIds];
+  // Obtener foto_paths de los registros seleccionados para borrar del storage
+  const toDelete=gastos.filter(g=>ids.includes(String(g.id)));
+  const fotoPaths=toDelete.map(g=>g.foto_path).filter(Boolean);
+  // Borrar archivos del storage
+  if(fotoPaths.length>0){
+    const{error:se}=await window.supabaseClient.storage.from(BUCKET_NAME).remove(fotoPaths);
+    if(se) console.warn("Error borrando archivos:",se.message);
+  }
+  // Borrar registros en lotes de 50
+  for(let i=0;i<ids.length;i+=50){
+    const batch=ids.slice(i,i+50);
+    const{error}=await window.supabaseClient.from("gastos_junquillar_app").delete().in("id",batch);
+    if(error){alert(`Error eliminando lote: ${error.message}`);break;}
+  }
+  selectedIds.clear();
+  await loadData();
 }
 
 async function getFotoUrl(path){
@@ -564,13 +633,18 @@ function setupButtons(){
   $("btn-export-csv")?.addEventListener("click",exportCSV);
   $("btn-export-excel")?.addEventListener("click",exportCSV);
   ["filter-text-gastos","global-search"].forEach(id=>$(id)?.addEventListener("input",applyFilters));
-  $("modal-overlay")?.addEventListener("click",closeEditModal);
+  $("modal-overlay")?.addEventListener("click", e => { if(e.target===$("modal-overlay")) closeEditModal(); });
   $("btn-modal-cancel")?.addEventListener("click",closeEditModal);
   $("btn-modal-save")?.addEventListener("click",saveEditModal);
+  $("chk-all")?.addEventListener("change", e=>toggleSelectAll(e.target));
+  $("btn-bulk-delete")?.addEventListener("click",bulkDelete);
+  $("btn-bulk-cancel")?.addEventListener("click",cancelBulkSelection);
 }
 function initDashboard(){setupNavigation();setupFileUpload();setupButtons();updateVisibleSections(views.resumen.visible);loadData();}
 document.addEventListener("DOMContentLoaded",initDashboard);
 
-window.openEditModal  = openEditModal;
-window.closeEditModal = closeEditModal;
-window.confirmDelete  = confirmDelete;
+/* ── Exponer funciones al scope global (necesario para onclick inline) ── */
+window.openEditModal   = openEditModal;
+window.closeEditModal  = closeEditModal;
+window.confirmDelete   = confirmDelete;
+window.toggleRowSelect = toggleRowSelect;
