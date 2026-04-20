@@ -282,15 +282,20 @@ function sheetToGastos(allRows, fotoPath){
     // Skip rows with no usable data
     if(!fechaVal && !get("proveedor") && !neto) continue;
 
+    // Boletas exentas: neto e iva vacíos → neto = total, iva = 0
+    const netoFinal  = (neto  !== null) ? neto  : (iva === null && total !== null ? total : 0);
+    const ivaFinal   = (iva   !== null) ? iva   : 0;
+    const totalFinal = (total !== null) ? total : (netoFinal + ivaFinal);
+
     results.push({
       fecha:            fechaVal || new Date().toISOString().slice(0,10),
       proveedor:        String(get("proveedor") || "").trim() || null,
       rut:              String(get("rut")        || "").trim() || null,
       tipo_documento:   String(get("tipo_documento")   || "").trim() || null,
       numero_documento: String(get("numero_documento") || "").trim() || null,
-      neto:             neto,
-      iva:              iva,
-      total:            total,
+      neto:             netoFinal,
+      iva:              ivaFinal,
+      total:            totalFinal,
       categoria:        String(get("categoria")   || "").trim() || null,
       metodo_pago:      String(get("metodo_pago") || "").trim() || null,
       proyecto:         PROJECT_NAME,
