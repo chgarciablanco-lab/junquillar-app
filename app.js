@@ -140,15 +140,7 @@ function getFileGroup(extension){
   if(["xls","xlsx","csv"].includes(extension)) return "planillas";
   return "pdf";
 }
-// ── Column name aliases: maps Excel headers → DB field names ──────────────────
-// ── PARSER EXCEL / CSV ────────────────────────────────────────────────────────
-// Estructura esperada del Excel:
-//   Fila 1: título (se ignora)
-//   Fila 2: encabezados  →  Fecha | Proveedor | RUT | Tipo | Nº Documento | Neto | IVA | Total | Categoría | Método de Pago | Proyecto
-//   Fila 3+: datos
-//   Última fila: puede ser fila de TOTAL (se ignora)
 
-// Mapeo exacto de encabezados del Excel → campos Supabase
 const EXACT_HEADERS = {
   0:  "fecha",
   1:  "proveedor",
@@ -163,7 +155,6 @@ const EXACT_HEADERS = {
   10: "proyecto"
 };
 
-// Aliases flexibles para otros Excel con encabezados distintos
 const HEADER_ALIASES = {
   fecha:            ["fecha","date"],
   proveedor:        ["proveedor","supplier","nombre","razón social","razon social","nombre proveedor"],
@@ -181,17 +172,14 @@ const HEADER_ALIASES = {
 function normH(h){ return String(h||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim(); }
 
 function buildColMap(headerRow){
-  // 1. Try exact positional match (our Excel format)
   const knownHeaders = ["fecha","proveedor","rut","tipo","nº documento","neto","iva","total","categoría","método de pago","proyecto"];
   const normalizedRow = headerRow.map(normH);
   const exactMatch = knownHeaders.every((h,i) => normalizedRow[i] && normalizedRow[i].includes(normH(h)));
   if(exactMatch){
-    // Use positional map directly
     const map = {};
     Object.entries(EXACT_HEADERS).forEach(([idx, field]) => { map[field] = Number(idx); });
     return map;
   }
-  // 2. Fallback: alias matching
   const map = {};
   normalizedRow.forEach((norm, idx) => {
     for(const [field, aliases] of Object.entries(HEADER_ALIASES)){
@@ -207,7 +195,6 @@ function buildColMap(headerRow){
 
 function toDateISO(val){
   if(val === null || val === undefined || val === "") return null;
-  // Excel serial number
   if(typeof val === "number"){
     const d = new Date(Math.round((val - 25569) * 86400 * 1000));
     if(!isNaN(d)) return d.toISOString().slice(0,10);
@@ -232,7 +219,6 @@ function isSkipRow(row, colMap){
   const proveedor = String(row[colMap.proveedor ?? 1] || "").trim().toLowerCase();
   const total     = String(row[colMap.total     ?? 7] || "").trim().toLowerCase();
   const neto      = String(row[colMap.neto      ?? 5] || "").trim().toLowerCase();
-  // Skip title rows, header rows, total rows, empty rows
   if(!row.some(c => String(c||"").trim())) return true;
   if(["total","subtotal","totales","sub total"].includes(proveedor)) return true;
   if(["total","subtotal","totales","sub total"].includes(neto))      return true;
@@ -242,8 +228,6 @@ function isSkipRow(row, colMap){
 
 function sheetToGastos(allRows, fotoPath){
   if(!allRows || allRows.length < 2) return [];
-
-  // Find header row: first row where col 0 looks like "fecha" or col 1 like "proveedor"
   let headerRowIdx = -1;
   for(let i = 0; i < Math.min(5, allRows.length); i++){
     const r = allRows[i];
@@ -254,46 +238,31 @@ function sheetToGastos(allRows, fotoPath){
       break;
     }
   }
-  if(headerRowIdx === -1){
-    // No header found, try row 0 anyway
-    headerRowIdx = 0;
-  }
-
+  if(headerRowIdx === -1) headerRowIdx = 0;
   const headerRow = allRows[headerRowIdx];
   const colMap = buildColMap(headerRow);
-
-  // Need at minimum fecha or proveedor mapped
   if(colMap.fecha === undefined && colMap.proveedor === undefined){
     console.warn("No se encontraron columnas reconocibles en el Excel.");
     return [];
   }
-
   const results = [];
   for(let i = headerRowIdx + 1; i < allRows.length; i++){
     const row = allRows[i];
     if(isSkipRow(row, colMap)) continue;
     const get = field => colMap[field] !== undefined ? row[colMap[field]] : undefined;
-
     const fechaVal = toDateISO(get("fecha"));
     const neto     = toNum(get("neto"));
     const iva      = toNum(get("iva"));
     const total    = toNum(get("total"));
-
-    // Skip rows with no usable data
     if(!fechaVal && !get("proveedor") && !neto) continue;
-
-    // Detectar si es boleta por tipo_documento o por ausencia de neto/iva
     const tipoRaw = String(get("tipo_documento") || "").toLowerCase();
     const esBoleta = tipoRaw.includes("boleta") || tipoRaw.includes("be");
-
     let netoFinal, ivaFinal, totalFinal;
     if(esBoleta){
-      // Boleta: IVA no recuperable → neto = total, iva = 0
       netoFinal  = (total !== null) ? total : (neto !== null ? neto : 0);
       ivaFinal   = 0;
       totalFinal = netoFinal;
     } else if(neto === null && iva === null && total !== null){
-      // Sin neto ni IVA pero con total → asumir boleta exenta
       netoFinal  = total;
       ivaFinal   = 0;
       totalFinal = total;
@@ -302,7 +271,6 @@ function sheetToGastos(allRows, fotoPath){
       ivaFinal   = (iva   !== null) ? iva   : 0;
       totalFinal = (total !== null) ? total : (netoFinal + ivaFinal);
     }
-
     results.push({
       fecha:            fechaVal || new Date().toISOString().slice(0,10),
       proveedor:        String(get("proveedor") || "").trim() || null,
@@ -330,7 +298,6 @@ async function parseSpreadsheet(file, fotoPath){
         const data = new Uint8Array(e.target.result);
         const wb = window.XLSX.read(data, { type:"array", cellDates:false });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        // Get raw values (not formatted strings) so numbers stay as numbers
         const allRows = window.XLSX.utils.sheet_to_json(ws, { header:1, defval:"", raw:true });
         resolve(sheetToGastos(allRows, fotoPath));
       } catch(err){
@@ -367,7 +334,6 @@ async function parseCSV(file, fotoPath){
 async function handleFileUpload(event){
   const file = event.target.files?.[0];
   if(!file) return;
-
   const extension = getFileExtension(file.name);
   if(!ALLOWED_FILE_EXTENSIONS.includes(extension)){
     alert("Formato no permitido. Usa JPG, PNG, PDF, Excel o CSV.");
@@ -385,45 +351,32 @@ async function handleFileUpload(event){
     alert("La librería para leer Excel no está cargada. Verifica tu conexión a internet.");
     event.target.value = ""; return;
   }
-
-  // ── Paso 1: parsear ANTES de subir (si es planilla) ──────────────────────
   const isSpreadsheet = ["xls","xlsx"].includes(extension);
   const isCSV = extension === "csv";
-
   let gastoRows = [];
   if(isSpreadsheet || isCSV){
     gastoRows = isCSV
-      ? await parseCSV(file, null)   // fotoPath = null por ahora
+      ? await parseCSV(file, null)
       : await parseSpreadsheet(file, null);
-
     if(!gastoRows.length){
       alert("No se encontraron filas con datos reconocibles en el archivo.\n\nAsegúrate de que el Excel tenga encabezados en la fila 2:\nFecha | Proveedor | RUT | Tipo | Nº Documento | Neto | IVA | Total | Categoría | Método de Pago");
       event.target.value = ""; return;
     }
   }
-
-  // ── Paso 2: subir archivo a Storage ──────────────────────────────────────
   const safeName  = sanitizeFileName(file.name);
   const fileGroup = getFileGroup(extension);
   const filePath  = `junquillar/${fileGroup}/${Date.now()}-${safeName}`;
-
   const { data: uploadData, error: uploadError } = await window.supabaseClient.storage
     .from(BUCKET_NAME)
     .upload(filePath, file, { cacheControl:"3600", upsert:false, contentType: file.type || undefined });
-
   if(uploadError){
     console.error("Error subiendo archivo:", uploadError);
     alert(`No se pudo subir el archivo: ${uploadError.message}`);
     event.target.value = ""; return;
   }
-
   const storedPath = uploadData.path;
-
-  // ── Paso 3a: si es planilla → insertar filas en Supabase ─────────────────
   if(isSpreadsheet || isCSV){
-    // Actualizar foto_path con el path real
     gastoRows.forEach(r => r.foto_path = storedPath);
-
     const BATCH = 50;
     let inserted = 0;
     for(let i = 0; i < gastoRows.length; i += BATCH){
@@ -443,8 +396,6 @@ async function handleFileUpload(event){
     event.target.value = "";
     await loadData(); return;
   }
-
-  // ── Paso 3b: imagen o PDF → registro pendiente OCR ───────────────────────
   const { error: insertError } = await window.supabaseClient
     .from("gastos_junquillar_app")
     .insert({
@@ -454,13 +405,11 @@ async function handleFileUpload(event){
       estado_ocr:  "pendiente",
       foto_path:   storedPath
     });
-
   if(insertError){
     console.error("Error creando registro:", insertError);
     alert(`Archivo subido pero no se pudo crear el registro: ${insertError.message}`);
     event.target.value = ""; return;
   }
-
   alert("📎 Archivo adjuntado correctamente.");
   event.target.value = "";
   await loadData();
@@ -592,46 +541,23 @@ function renderBalance(){
     el.innerHTML = emptyState("Balance sin movimientos. No hay gastos registrados.");
     return;
   }
-
-  // ── Constantes fijas ────────────────────────────────────────
   const TERRENO      = 100000000;
   const APORTE_SOCIO =  60000000;
-
-  // ── Cálculos contables ──────────────────────────────────────
-  // ACTIVOS
   const activoTerreno = TERRENO;
   const activoObra    = t.neto;
   const activoIvaCF   = t.iva;
   const totalActivo   = activoTerreno + activoObra + activoIvaCF;
-
-  // PASIVOS
-  // La cuenta por pagar al socio financia el terreno ($100M) y parte de la obra.
-  // Gastos por pagar = total bruto de documentos (neto + IVA).
-  // Para cuadrar: total DEBE = total HABER
-  //   DEBE  = Terreno + Obra + IVA CF = totalActivo
-  //   HABER = Aporte Socio + Gastos por pagar
-  // Gastos por pagar = totalActivo - APORTE_SOCIO
   const pasivoSocio   = APORTE_SOCIO;
-  const pasivoGastos  = t.total;   // documentos registrados
+  const pasivoGastos  = t.total;
   const totalPasivo   = pasivoSocio + pasivoGastos;
-
-  // Para cuadre perfecto el DEBE total debe ser igual al HABER total
-  // DEBE: Terreno + Obra + IVA = totalActivo
-  // HABER: Socio + Gastos = totalPasivo
-  // Diferencia → va a "Patrimonio / Capital pendiente" si existe
   const diferencia = totalActivo - totalPasivo;
-
   const clp = v => formatoCLP(v);
   const z   = () => `<span style="color:#94a3b8">$0</span>`;
-
   const cell = (v, color) => {
     if(!v || v === 0) return z();
     const s = clp(v);
     return color ? `<span style="color:${color};font-weight:600">${s}</span>` : s;
   };
-
-  // ── Fila normal ──────────────────────────────────────────────
-  // cols: N° | Cuenta | DEBE | HABER | DEUDOR | ACREEDOR | ACTIVO | PASIVO | PÉRDIDA | GANANCIA
   const row = (n, cuenta, debe, haber, deudor, acreedor, activo, pasivo, perdida, ganancia, extra="") =>
     `<div class="bal-row${extra}">
       <div class="bal-n">${n}</div>
@@ -645,13 +571,10 @@ function renderBalance(){
       <div class="bal-num">${cell(perdida, "#e11d48")}</div>
       <div class="bal-num">${cell(ganancia, "#059669")}</div>
     </div>`;
-
   const secHead = label =>
     `<div class="bal-section">${label}</div>`;
-
   el.innerHTML = `
     <div class="bal-wrap">
-
       <div class="bal-group-head">
         <div class="bal-gh-spacer"></div>
         <div class="bal-gh-group">MOVIMIENTOS</div>
@@ -659,7 +582,6 @@ function renderBalance(){
         <div class="bal-gh-group">BALANCE</div>
         <div class="bal-gh-group">RESULTADOS</div>
       </div>
-
       <div class="bal-col-head">
         <div class="bal-n">N°</div>
         <div class="bal-cuenta">Cuenta</div>
@@ -672,20 +594,13 @@ function renderBalance(){
         <div class="bal-num">PÉRDIDA</div>
         <div class="bal-num">GANANCIA</div>
       </div>
-
       ${secHead("ACTIVOS")}
-      ${row("1", "Terreno (Valor de adquisición)",
-          activoTerreno, 0, activoTerreno, 0, activoTerreno, 0, 0, 0)}
-      ${row("2", "Obra en Curso (Costos netos)",
-          activoObra, 0, activoObra, 0, activoObra, 0, 0, 0)}
-      ${row("3", "IVA Crédito Fiscal",
-          activoIvaCF, 0, activoIvaCF, 0, activoIvaCF, 0, 0, 0)}
-
+      ${row("1", "Terreno (Valor de adquisición)", activoTerreno, 0, activoTerreno, 0, activoTerreno, 0, 0, 0)}
+      ${row("2", "Obra en Curso (Costos netos)", activoObra, 0, activoObra, 0, activoObra, 0, 0, 0)}
+      ${row("3", "IVA Crédito Fiscal", activoIvaCF, 0, activoIvaCF, 0, activoIvaCF, 0, 0, 0)}
       ${secHead("PASIVOS")}
-      ${row("4", "Cuenta por pagar al Socio",
-          0, pasivoSocio, 0, pasivoSocio, 0, pasivoSocio, 0, 0)}
-      ${row("5", "Gastos por pagar / Cuentas por pagar",
-          0, pasivoGastos, 0, pasivoGastos, 0, pasivoGastos, 0, 0)}
+      ${row("4", "Cuenta por pagar al Socio", 0, pasivoSocio, 0, pasivoSocio, 0, pasivoSocio, 0, 0)}
+      ${row("5", "Gastos por pagar / Cuentas por pagar", 0, pasivoGastos, 0, pasivoGastos, 0, pasivoGastos, 0, 0)}
       ${diferencia !== 0 ? row("6",
           diferencia > 0 ? "Capital / Patrimonio pendiente" : "Ajuste por diferencia",
           diferencia > 0 ? diferencia : 0,
@@ -695,7 +610,6 @@ function renderBalance(){
           0, 0,
           diferencia < 0 ? Math.abs(diferencia) : 0,
           diferencia > 0 ? diferencia : 0) : ""}
-
       <div class="bal-row bal-total">
         <div class="bal-n"></div>
         <div class="bal-cuenta">TOTAL</div>
@@ -708,10 +622,8 @@ function renderBalance(){
         <div class="bal-num">$0</div>
         <div class="bal-num">$0</div>
       </div>
-
     </div>
   `;
-
   const prevNote = el.parentElement.querySelector(".balance-note");
   if(prevNote) prevNote.remove();
   el.insertAdjacentHTML("afterend",
@@ -728,29 +640,72 @@ function renderControlKpis(){
 function renderControlEtapas(){
   const el=$("control-etapas"); if(!el) return; if(!gastos.length){ el.innerHTML=emptyState("Sin avance registrado. No hay gastos para calcular etapas."); return; }
   const groups=groupBy(gastos,g=>g.categoria||"Sin categoría"), total=sumBy(gastos,"neto");
-  el.innerHTML=Object.entries(groups).map(([cat,rows])=>{ const monto=sumBy(rows,"neto"), pct=total?(monto/total)*100:0; return `<div class="etapa-card"><div class="etapa-title">${cat}</div><div class="etapa-value">${formatoCLP(monto)}</div><div class="cat-track"><div class="cat-fill" style="width:${Math.min(pct,100)}%"></div></div><div class="etapa-sub">${formatoPct(pct)} del gasto registrado</div></div>`; }).join("");
+  el.innerHTML=Object.entries(groups).map(([cat,rows])=>{ const monto=sumBy(rows,"neto"), pct=total?(monto/total)*100:0; return `<div class="etapa-card"><div class="etapa-title">${cat}</div><div class="etapa-value">${formatoCLP(monto)}</div><div class="cat-track"><div class="cat-fill cat-fill-green" style="width:${Math.min(pct,100)}%"></div></div><div class="etapa-sub">${formatoPct(pct)} del gasto registrado</div></div>`; }).join("");
 }
+
+/* ── HITOS: grid 2×2 con iconos ──────────────────────────── */
 function renderControlHitos(){
-  const el=$("control-hitos"); if(!el) return; if(!gastos.length){ el.innerHTML=emptyState("Sin hitos calculados. No hay gastos registrados."); return; }
-  const t=getTotals(); const hitos = [["Documentación", t.pendientesOcr>0?"Pendiente":"Completo", `${t.pendientesOcr} documentos pendientes OCR`],["Presupuesto", t.neto>PROJECT_BUDGET?"Sobre presupuesto":"En control", `${formatoCLP(t.neto)} ejecutado`],["Proveedores", t.proveedores>0?"Con actividad":"Sin actividad", `${t.proveedores} proveedores registrados`]];
-  el.innerHTML=hitos.map(h=>`<div class="hito-row"><div class="doc-name">${h[0]}</div><div><span class="status ${h[1]==="En control"||h[1]==="Completo"||h[1]==="Con actividad"?"s-green":"s-amber"}">${h[1]}</span></div><div>${h[2]}</div></div>`).join("");
+  const el=$("control-hitos"); if(!el) return;
+  if(!gastos.length){ el.innerHTML=emptyState("Sin hitos calculados. No hay gastos registrados."); return; }
+  const t=getTotals();
+  const hitos = [
+    { icon:"📄", label:"Documentación",  estado: t.pendientesOcr>0?"Pendiente":"Completo",       desc:`${t.pendientesOcr} documentos pendientes OCR`,       ok: t.pendientesOcr===0 },
+    { icon:"💰", label:"Presupuesto",    estado: t.neto>PROJECT_BUDGET?"Sobre presupuesto":"En control", desc:`${formatoCLP(t.neto)} ejecutado`,           ok: t.neto<=PROJECT_BUDGET },
+    { icon:"🏢", label:"Proveedores",    estado: t.proveedores>0?"Con actividad":"Sin actividad",  desc:`${t.proveedores} proveedores registrados`,            ok: t.proveedores>0 },
+    { icon:"📊", label:"Avance",         estado: t.neto>0?"En progreso":"Sin inicio",              desc:`${formatoPct(PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0)} del presupuesto`, ok: t.neto>0 }
+  ];
+  el.innerHTML = `<div class="hitos-2x2">${hitos.map(h=>`
+    <div class="hito-tile">
+      <div class="hito-tile-top">
+        <span class="hito-tile-icon">${h.icon}</span>
+        <span class="status ${h.ok?"s-green":"s-amber"}">${h.estado}</span>
+      </div>
+      <div class="hito-tile-label">${h.label}</div>
+      <div class="hito-tile-desc">${h.desc}</div>
+    </div>`).join("")}</div>`;
 }
+
 function renderControlCat(){
   const el=$("control-cat"); if(!el) return; if(!gastos.length){ el.innerHTML=emptyState("Sin costos por categoría."); return; }
   const catGroups=groupBy(gastos,g=>g.categoria||"Sin categoría"), total=sumBy(gastos,"neto"), months=[...new Set(gastos.map(g=>mesLabel(g.fecha)))].sort();
   el.innerHTML=Object.entries(catGroups).map(([cat,rows])=>{ const byMonth=groupBy(rows,r=>mesLabel(r.fecha)), catTotal=sumBy(rows,"neto"); const vals=Array.from({length:5}).map((_,i)=>`<div>${months[i]?formatoCLP(sumBy(byMonth[months[i]]||[],"neto")):"—"}</div>`).join(""); return `<div class="table-row ctrl-cat-row"><div><span class="cat-badge ${getCategoriaClass(cat)}">${cat}</span></div><div>Gasto</div>${vals}<div>${formatoCLP(catTotal)}</div><div>${formatoPct(total?(catTotal/total)*100:0)}</div></div>`; }).join("");
 }
+
 function renderReportes(){ renderReportesCat(); renderReportesEtapas(); }
 function renderReportesCat(){
   const el=$("reportes-cat"); if(!el) return; if(!gastos.length){ el.innerHTML=emptyState("Sin reporte por categoría."); return; }
   const groups=groupBy(gastos,g=>g.categoria||"Sin categoría"), total=sumBy(gastos,"neto");
-  el.innerHTML=Object.entries(groups).map(([cat,rows])=>({cat,monto:sumBy(rows,"neto"),docs:rows.length})).sort((a,b)=>b.monto-a.monto).map(r=>`<div class="report-row"><div class="report-label">${r.cat}</div><div class="report-value">${formatoCLP(r.monto)}</div><div class="cat-track"><div class="cat-fill" style="width:${Math.min(total?(r.monto/total)*100:0,100)}%"></div></div><div class="report-sub">${r.docs} docs · ${formatoPct(total?(r.monto/total)*100:0)}</div></div>`).join("");
+  el.innerHTML=Object.entries(groups).map(([cat,rows])=>({cat,monto:sumBy(rows,"neto"),docs:rows.length})).sort((a,b)=>b.monto-a.monto).map(r=>`<div class="report-row"><div class="report-label">${r.cat}</div><div class="report-value">${formatoCLP(r.monto)}</div><div class="cat-track"><div class="cat-fill cat-fill-green" style="width:${Math.min(total?(r.monto/total)*100:0,100)}%"></div></div><div class="report-sub">${r.docs} docs · ${formatoPct(total?(r.monto/total)*100:0)}</div></div>`).join("");
 }
+
+/* ── REPORTE MENSUAL: tarjetas con barra verde ───────────── */
 function renderReportesEtapas(){
-  const el=$("reportes-etapas"); if(!el) return; if(!gastos.length){ el.innerHTML=emptyState("Sin reporte mensual."); return; }
+  const el=$("reportes-etapas"); if(!el) return;
+  if(!gastos.length){ el.innerHTML=emptyState("Sin reporte mensual."); return; }
   const groups=groupBy(gastos,g=>mesLabel(g.fecha));
-  el.innerHTML=Object.entries(groups).sort(([a],[b])=>a.localeCompare(b)).map(([mes,rows])=>`<div class="report-row"><div class="report-label">${mes}</div><div class="report-value">${formatoCLP(sumBy(rows,"neto"))}</div><div class="report-sub">${rows.length} documentos · IVA ${formatoCLP(sumBy(rows,"iva"))}</div></div>`).join("");
+  const totalGlobal = sumBy(gastos,"neto");
+  const sorted = Object.entries(groups).sort(([a],[b])=>a.localeCompare(b));
+  el.innerHTML = `<div class="reporte-mensual-grid">${sorted.map(([mes,rows])=>{
+    const neto = sumBy(rows,"neto");
+    const iva  = sumBy(rows,"iva");
+    const pct  = totalGlobal ? (neto/totalGlobal)*100 : 0;
+    return `<div class="reporte-mes-card">
+      <div class="reporte-mes-header">
+        <span class="reporte-mes-nombre">${mes}</span>
+        <span class="reporte-mes-docs">${rows.length} doc${rows.length!==1?"s":""}</span>
+      </div>
+      <div class="reporte-mes-monto">${formatoCLP(neto)}</div>
+      <div class="cat-track" style="margin:8px 0 6px">
+        <div class="cat-fill cat-fill-green" style="width:${Math.min(pct,100)}%"></div>
+      </div>
+      <div class="reporte-mes-footer">
+        <span>IVA ${formatoCLP(iva)}</span>
+        <span>${formatoPct(pct)}</span>
+      </div>
+    </div>`;
+  }).join("")}</div>`;
 }
+
 function updateVisibleSections(ids=[]){ document.querySelectorAll(".module-block").forEach(s=>s.classList.add("module-hidden")); ids.forEach(id=>$(id)?.classList.remove("module-hidden")); }
 function setupNavigation(){
   const buttons=document.querySelectorAll(".nav-btn"), title=$("page-title"), subtitle=$("page-subtitle");
