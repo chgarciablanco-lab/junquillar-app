@@ -1,660 +1,395 @@
-/* JUNQO – Casa Junquillar | app.js limpio */
+/* JUNQO – Casa Junquillar | app.js */
+const BUDGET_KEY = "junqo_presupuesto";
+let PROJECT_BUDGET = 180000000;
 const PROJECT_NAME = "Junquillar";
-const PROJECT_BUDGET = 180000000;
 const BUCKET_NAME = "comprobantes-junquillar";
 const MAX_FILE_SIZE_MB = 10;
-const ALLOWED_FILE_EXTENSIONS = ["jpg", "jpeg", "png", "pdf", "xls", "xlsx", "csv"];
+const ALLOWED_FILE_EXTENSIONS = ["jpg","jpeg","png","pdf","xls","xlsx","csv"];
+const REPORT_WIDGETS_KEY = "junqo_report_widgets";
 
 let gastos = [];
 let filteredDocs = [];
 let currentView = "resumen";
 let docsVisibleLimit = 10;
+let editModalGasto = null;
+
+const DEFAULT_WIDGETS = ["cat","mensual","proveedores","iva","avance","documentos"];
+let activeWidgets = JSON.parse(localStorage.getItem(REPORT_WIDGETS_KEY) || JSON.stringify(DEFAULT_WIDGETS));
 
 const views = {
-  resumen: { title: "Resumen", subtitle: "Vista ejecutiva del proyecto", visible: ["section-kpis", "section-alerts", "section-bottom"] },
-  control: { title: "Control de Proyecto", subtitle: "Avance presupuestario, partidas e hitos", visible: ["section-control"] },
-  gastos: { title: "Gastos", subtitle: "Registro y control de egresos del proyecto", visible: ["section-filtro-solo", "section-docs"] },
-  documentos: { title: "Documentos", subtitle: "Carga de facturas, boletas y respaldo documental", visible: ["section-upload"] },
-  proveedores: { title: "Proveedores", subtitle: "Análisis por proveedor, documentos y concentración de gasto", visible: ["section-proveedores"] },
-  caja: { title: "Caja e IVA", subtitle: "Crédito fiscal, documentos y detalle mensual", visible: ["section-caja"] },
-  balance: { title: "Balance", subtitle: "Vista contable calculada desde los gastos registrados", visible: ["section-balance"] },
-  reportes: { title: "Reportes", subtitle: "Análisis resumido por categoría y mes", visible: ["section-reportes"] }
+  resumen:     { title:"Resumen",            subtitle:"Vista ejecutiva del proyecto",                        visible:["section-kpis","section-alerts","section-bottom"] },
+  control:     { title:"Control de Proyecto",subtitle:"Avance presupuestario, partidas e hitos",             visible:["section-control"] },
+  gastos:      { title:"Gastos",             subtitle:"Registro y control de egresos del proyecto",          visible:["section-filtro-solo","section-docs"] },
+  documentos:  { title:"Documentos",         subtitle:"Carga de facturas, boletas y respaldo documental",    visible:["section-upload-only"] },
+  proveedores: { title:"Proveedores",        subtitle:"Análisis por proveedor, documentos y concentración",  visible:["section-proveedores"] },
+  caja:        { title:"Caja e IVA",         subtitle:"Crédito fiscal, documentos y detalle mensual",        visible:["section-caja"] },
+  balance:     { title:"Balance",            subtitle:"Vista contable calculada desde los gastos registrados",visible:["section-balance"] },
+  reportes:    { title:"Reportes",           subtitle:"Análisis resumido por categoría y mes",               visible:["section-reportes"] }
 };
 
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 
-function numberValue(value){
-  if(value === null || value === undefined || value === "") return 0;
-  const n = Number(String(value).replace(/\./g, "").replace(",", "."));
-  return Number.isFinite(n) ? n : 0;
-}
-function formatoCLP(value){
-  return numberValue(value).toLocaleString("es-CL", { style:"currency", currency:"CLP", maximumFractionDigits:0 });
-}
-function formatoPct(value){
-  return `${Number(value || 0).toLocaleString("es-CL", { maximumFractionDigits:1 })}%`;
-}
-function normalizarFecha(fecha){
-  if(!fecha) return "—";
-  const raw = String(fecha).slice(0,10);
-  if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
-    const [y,m,d] = raw.split("-");
-    return `${d}/${m}/${y}`;
-  }
-  return raw;
-}
-function fechaOrdenable(fecha){
-  if(!fecha) return "";
-  if(/^\d{4}-\d{2}-\d{2}/.test(fecha)) return String(fecha).slice(0,10);
-  if(/^\d{2}\/\d{2}\/\d{4}$/.test(fecha)){
-    const [d,m,y] = fecha.split("/");
-    return `${y}-${m}-${d}`;
-  }
-  return String(fecha);
-}
-function mesLabel(fecha){
-  const f = fechaOrdenable(fecha);
-  if(!f || f.length < 7) return "Sin fecha";
-  const [y,m] = f.split("-");
-  const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
-  return `${meses[Number(m)-1] || m} ${y}`;
-}
-function getCategoriaClass(categoria=""){
-  const cat = String(categoria || "").toLowerCase();
-  if(cat.includes("material")) return "cat-materiales";
-  if(cat.includes("mano")) return "cat-mano";
-  if(cat.includes("servicio") || cat.includes("aliment")) return "cat-servicios";
-  if(cat.includes("herramienta")) return "cat-herramientas";
-  if(cat.includes("transporte")) return "cat-transporte";
-  return "cat-otros";
-}
-function sumBy(rows, field){ return rows.reduce((acc, item) => acc + numberValue(item[field]), 0); }
-function uniqueCount(rows, field){ return new Set(rows.map(i => i[field]).filter(Boolean)).size; }
-function groupBy(rows, keyFn){
-  return rows.reduce((acc, row) => {
-    const key = keyFn(row) || "Sin clasificar";
-    if(!acc[key]) acc[key] = [];
-    acc[key].push(row);
-    return acc;
-  }, {});
-}
-function getTotals(rows = gastos){
-  const neto = sumBy(rows, "neto");
-  const iva = sumBy(rows, "iva");
-  const total = sumBy(rows, "total");
-  const docs = rows.length;
-  const proveedores = uniqueCount(rows, "proveedor");
-  const pendientesOcr = rows.filter(g => String(g.estado_ocr || "").toLowerCase() === "pendiente").length;
-  const sinProveedor = rows.filter(g => !g.proveedor).length;
-  return { neto, iva, total, docs, proveedores, pendientesOcr, sinProveedor };
-}
-function emptyState(text="Sin registros para mostrar."){
-  return `<div class="empty-state">${text}</div>`;
+/* ── FORMATEO ─────────────────────────────────────────────── */
+function numberValue(v){ if(v===null||v===undefined||v==="") return 0; const n=Number(String(v).replace(/\./g,"").replace(",",".")); return Number.isFinite(n)?n:0; }
+function formatoCLP(v){ return numberValue(v).toLocaleString("es-CL",{style:"currency",currency:"CLP",maximumFractionDigits:0}); }
+function formatoPct(v){ return `${Number(v||0).toLocaleString("es-CL",{maximumFractionDigits:1})}%`; }
+function normalizarFecha(f){ if(!f) return "—"; const r=String(f).slice(0,10); if(/^\d{4}-\d{2}-\d{2}$/.test(r)){const[y,m,d]=r.split("-");return`${d}/${m}/${y}`;}return r; }
+function fechaOrdenable(f){ if(!f) return ""; if(/^\d{4}-\d{2}-\d{2}/.test(f)) return String(f).slice(0,10); if(/^\d{2}\/\d{2}\/\d{4}$/.test(f)){const[d,m,y]=f.split("/");return`${y}-${m}-${d}`;}return String(f); }
+function mesLabel(f){ const x=fechaOrdenable(f); if(!x||x.length<7) return "Sin fecha"; const[y,m]=x.split("-"); const ms=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"]; return`${ms[Number(m)-1]||m} ${y}`; }
+function getCategoriaClass(c=""){ const cat=String(c||"").toLowerCase(); if(cat.includes("material")) return"cat-materiales"; if(cat.includes("mano")) return"cat-mano"; if(cat.includes("servicio")||cat.includes("aliment")) return"cat-servicios"; if(cat.includes("herramienta")) return"cat-herramientas"; if(cat.includes("transporte")) return"cat-transporte"; return"cat-otros"; }
+function sumBy(rows,f){ return rows.reduce((a,i)=>a+numberValue(i[f]),0); }
+function uniqueCount(rows,f){ return new Set(rows.map(i=>i[f]).filter(Boolean)).size; }
+function groupBy(rows,fn){ return rows.reduce((a,r)=>{ const k=fn(r)||"Sin clasificar"; if(!a[k])a[k]=[]; a[k].push(r); return a; },{}); }
+function emptyState(t="Sin registros."){ return`<div class="empty-state">${t}</div>`; }
+
+function getTotals(rows=gastos){
+  const neto=sumBy(rows,"neto"),iva=sumBy(rows,"iva"),total=sumBy(rows,"total"),docs=rows.length;
+  const proveedores=uniqueCount(rows,"proveedor");
+  const pendientesOcr=rows.filter(g=>String(g.estado_ocr||"").toLowerCase()==="pendiente").length;
+  const sinProveedor=rows.filter(g=>!g.proveedor).length;
+  return{neto,iva,total,docs,proveedores,pendientesOcr,sinProveedor};
 }
 
-function mapSupabaseRow(row){
-  return {
-    id: row.id,
-    fecha: row.fecha,
-    proveedor: row.proveedor || "",
-    rut: row.rut || "",
-    tipo_documento: row.tipo_documento || "",
-    numero_documento: row.numero_documento || "",
-    iva: numberValue(row.iva),
-    total: numberValue(row.total),
-    metodo_pago: row.metodo_pago || "",
-    proyecto: row.proyecto || PROJECT_NAME,
-    observacion: row.observacion || "",
-    foto_url: row.foto_url || "",
-    estado_ocr: row.estado_ocr || "",
-    created_at: row.created_at || "",
-    neto: numberValue(row.neto),
-    categoria: row.categoria || "",
-    foto_path: row.foto_path || ""
-  };
-}
-function docRowFromGasto(gasto){
-  return {
-    date: normalizarFecha(gasto.fecha),
-    name: gasto.proveedor || "Pendiente OCR",
-    rut: gasto.rut || "—",
-    tipo: gasto.tipo_documento || "—",
-    cat: gasto.categoria || "Sin categoría",
-    catCls: getCategoriaClass(gasto.categoria),
-    costo: formatoCLP(gasto.neto),
-    iva: gasto.iva ? formatoCLP(gasto.iva) : "—",
-    total: gasto.total ? formatoCLP(gasto.total) : "—",
-    cf: numberValue(gasto.iva) > 0 ? "✔" : "—",
-    pago: gasto.metodo_pago || "—",
-    fotoPath: gasto.foto_path || null,
-    observacion: gasto.observacion || ""
-  };
+/* ── SUPABASE ROW MAP ─────────────────────────────────────── */
+function mapSupabaseRow(r){
+  return{ id:r.id, fecha:r.fecha, proveedor:r.proveedor||"", rut:r.rut||"", tipo_documento:r.tipo_documento||"", numero_documento:r.numero_documento||"", iva:numberValue(r.iva), total:numberValue(r.total), metodo_pago:r.metodo_pago||"", proyecto:r.proyecto||PROJECT_NAME, observacion:r.observacion||"", foto_url:r.foto_url||"", estado_ocr:r.estado_ocr||"", created_at:r.created_at||"", neto:numberValue(r.neto), categoria:r.categoria||"", foto_path:r.foto_path||"" };
 }
 
-function getFileExtension(filename){ return String(filename || "").split(".").pop().toLowerCase(); }
-function sanitizeFileName(filename){
-  return String(filename || "archivo").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-function getFileGroup(extension){
-  if(["jpg","jpeg","png"].includes(extension)) return "imagenes";
-  if(["xls","xlsx","csv"].includes(extension)) return "planillas";
-  return "pdf";
-}
+/* ── FILE UTILS ───────────────────────────────────────────── */
+function getFileExtension(f){ return String(f||"").split(".").pop().toLowerCase(); }
+function sanitizeFileName(f){ return String(f||"archivo").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9._-]/g,"_"); }
+function getFileGroup(ext){ if(["jpg","jpeg","png"].includes(ext)) return"imagenes"; if(["xls","xlsx","csv"].includes(ext)) return"planillas"; return"pdf"; }
 
-const EXACT_HEADERS = {
-  0:  "fecha",
-  1:  "proveedor",
-  2:  "rut",
-  3:  "tipo_documento",
-  4:  "numero_documento",
-  5:  "neto",
-  6:  "iva",
-  7:  "total",
-  8:  "categoria",
-  9:  "metodo_pago",
-  10: "proyecto"
-};
-
-const HEADER_ALIASES = {
-  fecha:            ["fecha","date"],
-  proveedor:        ["proveedor","supplier","nombre","razón social","razon social","nombre proveedor"],
-  rut:              ["rut","r.u.t","r.u.t.","rut proveedor"],
-  tipo_documento:   ["tipo","tipo documento","tipo doc","tipo doc.","type","documento","nº documento"],
-  numero_documento: ["nº documento","n° documento","numero documento","número documento","folio","nro","n°","doc"],
-  neto:             ["neto","monto neto","base neta","costo neto","net","base"],
-  iva:              ["iva","i.v.a","i.v.a.","tax","impuesto"],
-  total:            ["total","total doc","total documento","monto total","total bruto"],
-  categoria:        ["categoría","categoria","category","partida","etapa"],
-  metodo_pago:      ["método de pago","metodo de pago","método pago","metodo pago","forma pago","forma de pago","pago","payment"],
-  proyecto:         ["proyecto","project"]
-};
-
+/* ── EXCEL PARSER ─────────────────────────────────────────── */
+const EXACT_HEADERS={0:"fecha",1:"proveedor",2:"rut",3:"tipo_documento",4:"numero_documento",5:"neto",6:"iva",7:"total",8:"categoria",9:"metodo_pago",10:"proyecto"};
+const HEADER_ALIASES={fecha:["fecha","date"],proveedor:["proveedor","supplier","nombre","razón social","razon social"],rut:["rut","r.u.t","r.u.t."],tipo_documento:["tipo","tipo documento","tipo doc","type","documento"],numero_documento:["nº documento","n° documento","numero documento","folio","nro","n°","doc"],neto:["neto","monto neto","base neta","costo neto","net","base"],iva:["iva","i.v.a","i.v.a.","tax","impuesto"],total:["total","total doc","monto total","total bruto"],categoria:["categoría","categoria","category","partida","etapa"],metodo_pago:["método de pago","metodo de pago","método pago","forma pago","pago","payment"],proyecto:["proyecto","project"]};
 function normH(h){ return String(h||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim(); }
+function buildColMap(hr){ const known=["fecha","proveedor","rut","tipo","nº documento","neto","iva","total","categoría","método de pago","proyecto"],nr=hr.map(normH),exact=known.every((h,i)=>nr[i]&&nr[i].includes(normH(h))); if(exact){const m={};Object.entries(EXACT_HEADERS).forEach(([i,f])=>{m[f]=Number(i);});return m;} const m={};nr.forEach((n,i)=>{for(const[f,al]of Object.entries(HEADER_ALIASES)){if(m[f]!==undefined)continue;if(al.some(a=>n===normH(a)||n.includes(normH(a)))){m[f]=i;break;}}});return m; }
+function toDateISO(v){ if(v===null||v===undefined||v==="") return null; if(typeof v==="number"){const d=new Date(Math.round((v-25569)*86400*1000));if(!isNaN(d))return d.toISOString().slice(0,10);}const s=String(v).trim();if(/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(s)){const[d,m,y]=s.split(/[-\/]/);return`${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;}if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);return null; }
+function toNum(v){ if(v===null||v===undefined||v==="") return null; if(typeof v==="number") return v; const n=Number(String(v).replace(/\./g,"").replace(",",".").replace(/[^0-9.\-]/g,"")); return Number.isFinite(n)?n:null; }
+function isSkipRow(row,cm){ const p=String(row[cm.proveedor??1]||"").trim().toLowerCase(),t=String(row[cm.total??7]||"").trim().toLowerCase(),n=String(row[cm.neto??5]||"").trim().toLowerCase(); if(!row.some(c=>String(c||"").trim()))return true; if(["total","subtotal","totales","sub total"].includes(p))return true; if(["total","subtotal","totales","sub total"].includes(n))return true; if(p==="proveedor"||p==="supplier")return true; return false; }
+function sheetToGastos(rows,fp){ if(!rows||rows.length<2)return[]; let hi=-1; for(let i=0;i<Math.min(5,rows.length);i++){const r=rows[i],c0=normH(r[0]),c1=normH(r[1]);if(c0==="fecha"||c0.includes("fecha")||c1==="proveedor"||c1.includes("proveedor")){hi=i;break;}} if(hi===-1)hi=0; const hr=rows[hi],cm=buildColMap(hr); if(cm.fecha===undefined&&cm.proveedor===undefined)return[]; const res=[]; for(let i=hi+1;i<rows.length;i++){const row=rows[i];if(isSkipRow(row,cm))continue;const get=f=>cm[f]!==undefined?row[cm[f]]:undefined;const fv=toDateISO(get("fecha")),neto=toNum(get("neto")),iva=toNum(get("iva")),total=toNum(get("total"));if(!fv&&!get("proveedor")&&!neto)continue;const tr=String(get("tipo_documento")||"").toLowerCase(),esBoleta=tr.includes("boleta")||tr.includes("be");let nf,ivf,tf;if(esBoleta){nf=(total!==null)?total:(neto!==null?neto:0);ivf=0;tf=nf;}else if(neto===null&&iva===null&&total!==null){nf=total;ivf=0;tf=total;}else{nf=(neto!==null)?neto:0;ivf=(iva!==null)?iva:0;tf=(total!==null)?total:(nf+ivf);}res.push({fecha:fv||new Date().toISOString().slice(0,10),proveedor:String(get("proveedor")||"").trim()||null,rut:String(get("rut")||"").trim()||null,tipo_documento:String(get("tipo_documento")||"").trim()||null,numero_documento:String(get("numero_documento")||"").trim()||null,neto:nf,iva:ivf,total:tf,categoria:String(get("categoria")||"").trim()||null,metodo_pago:String(get("metodo_pago")||"").trim()||null,proyecto:PROJECT_NAME,foto_path:fp,estado_ocr:"importado"});}return res; }
+async function parseSpreadsheet(file,fp){ return new Promise(res=>{ const r=new FileReader();r.onload=e=>{try{const d=new Uint8Array(e.target.result),wb=window.XLSX.read(d,{type:"array",cellDates:false}),ws=wb.Sheets[wb.SheetNames[0]],rows=window.XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:true});res(sheetToGastos(rows,fp));}catch(err){console.error(err);res([]);}};r.onerror=()=>res([]);r.readAsArrayBuffer(file);}); }
+async function parseCSV(file,fp){ return new Promise(res=>{ const r=new FileReader();r.onload=e=>{try{const text=e.target.result,sep=text.includes(";")?";":","  ,rows=text.split(/\r?\n/).filter(l=>l.trim()).map(l=>l.split(sep).map(c=>c.replace(/^"|"$/g,"").trim()));res(sheetToGastos(rows,fp));}catch(err){console.error(err);res([]);}};r.onerror=()=>res([]);r.readAsText(file,"UTF-8");}); }
 
-function buildColMap(headerRow){
-  const knownHeaders = ["fecha","proveedor","rut","tipo","nº documento","neto","iva","total","categoría","método de pago","proyecto"];
-  const normalizedRow = headerRow.map(normH);
-  const exactMatch = knownHeaders.every((h,i) => normalizedRow[i] && normalizedRow[i].includes(normH(h)));
-  if(exactMatch){
-    const map = {};
-    Object.entries(EXACT_HEADERS).forEach(([idx, field]) => { map[field] = Number(idx); });
-    return map;
-  }
-  const map = {};
-  normalizedRow.forEach((norm, idx) => {
-    for(const [field, aliases] of Object.entries(HEADER_ALIASES)){
-      if(map[field] !== undefined) continue;
-      if(aliases.some(a => norm === normH(a) || norm.includes(normH(a)))){
-        map[field] = idx;
-        break;
-      }
-    }
-  });
-  return map;
-}
-
-function toDateISO(val){
-  if(val === null || val === undefined || val === "") return null;
-  if(typeof val === "number"){
-    const d = new Date(Math.round((val - 25569) * 86400 * 1000));
-    if(!isNaN(d)) return d.toISOString().slice(0,10);
-  }
-  const s = String(val).trim();
-  if(/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(s)){
-    const [d,m,y] = s.split(/[-\/]/);
-    return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
-  }
-  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
-  return null;
-}
-
-function toNum(val){
-  if(val === null || val === undefined || val === "") return null;
-  if(typeof val === "number") return val;
-  const n = Number(String(val).replace(/\./g,"").replace(",",".").replace(/[^0-9.\-]/g,""));
-  return Number.isFinite(n) ? n : null;
-}
-
-function isSkipRow(row, colMap){
-  const proveedor = String(row[colMap.proveedor ?? 1] || "").trim().toLowerCase();
-  const total     = String(row[colMap.total     ?? 7] || "").trim().toLowerCase();
-  const neto      = String(row[colMap.neto      ?? 5] || "").trim().toLowerCase();
-  if(!row.some(c => String(c||"").trim())) return true;
-  if(["total","subtotal","totales","sub total"].includes(proveedor)) return true;
-  if(["total","subtotal","totales","sub total"].includes(neto))      return true;
-  if(proveedor === "proveedor" || proveedor === "supplier")          return true;
-  return false;
-}
-
-function sheetToGastos(allRows, fotoPath){
-  if(!allRows || allRows.length < 2) return [];
-  let headerRowIdx = -1;
-  for(let i = 0; i < Math.min(5, allRows.length); i++){
-    const r = allRows[i];
-    const c0 = normH(r[0]);
-    const c1 = normH(r[1]);
-    if(c0 === "fecha" || c0.includes("fecha") || c1 === "proveedor" || c1.includes("proveedor")){
-      headerRowIdx = i;
-      break;
-    }
-  }
-  if(headerRowIdx === -1) headerRowIdx = 0;
-  const headerRow = allRows[headerRowIdx];
-  const colMap = buildColMap(headerRow);
-  if(colMap.fecha === undefined && colMap.proveedor === undefined){
-    console.warn("No se encontraron columnas reconocibles en el Excel.");
-    return [];
-  }
-  const results = [];
-  for(let i = headerRowIdx + 1; i < allRows.length; i++){
-    const row = allRows[i];
-    if(isSkipRow(row, colMap)) continue;
-    const get = field => colMap[field] !== undefined ? row[colMap[field]] : undefined;
-    const fechaVal = toDateISO(get("fecha"));
-    const neto     = toNum(get("neto"));
-    const iva      = toNum(get("iva"));
-    const total    = toNum(get("total"));
-    if(!fechaVal && !get("proveedor") && !neto) continue;
-    const tipoRaw = String(get("tipo_documento") || "").toLowerCase();
-    const esBoleta = tipoRaw.includes("boleta") || tipoRaw.includes("be");
-    let netoFinal, ivaFinal, totalFinal;
-    if(esBoleta){
-      netoFinal  = (total !== null) ? total : (neto !== null ? neto : 0);
-      ivaFinal   = 0;
-      totalFinal = netoFinal;
-    } else if(neto === null && iva === null && total !== null){
-      netoFinal  = total;
-      ivaFinal   = 0;
-      totalFinal = total;
-    } else {
-      netoFinal  = (neto  !== null) ? neto  : 0;
-      ivaFinal   = (iva   !== null) ? iva   : 0;
-      totalFinal = (total !== null) ? total : (netoFinal + ivaFinal);
-    }
-    results.push({
-      fecha:            fechaVal || new Date().toISOString().slice(0,10),
-      proveedor:        String(get("proveedor") || "").trim() || null,
-      rut:              String(get("rut")        || "").trim() || null,
-      tipo_documento:   String(get("tipo_documento")   || "").trim() || null,
-      numero_documento: String(get("numero_documento") || "").trim() || null,
-      neto:             netoFinal,
-      iva:              ivaFinal,
-      total:            totalFinal,
-      categoria:        String(get("categoria")   || "").trim() || null,
-      metodo_pago:      String(get("metodo_pago") || "").trim() || null,
-      proyecto:         PROJECT_NAME,
-      foto_path:        fotoPath,
-      estado_ocr:       "importado"
-    });
-  }
-  return results;
-}
-
-async function parseSpreadsheet(file, fotoPath){
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const wb = window.XLSX.read(data, { type:"array", cellDates:false });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const allRows = window.XLSX.utils.sheet_to_json(ws, { header:1, defval:"", raw:true });
-        resolve(sheetToGastos(allRows, fotoPath));
-      } catch(err){
-        console.error("Error parseando Excel:", err);
-        resolve([]);
-      }
-    };
-    reader.onerror = () => resolve([]);
-    reader.readAsArrayBuffer(file);
-  });
-}
-
-async function parseCSV(file, fotoPath){
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const text = e.target.result;
-        const sep = text.includes(";") ? ";" : ",";
-        const allRows = text.split(/\r?\n/)
-          .filter(l => l.trim())
-          .map(l => l.split(sep).map(c => c.replace(/^"|"$/g,"").trim()));
-        resolve(sheetToGastos(allRows, fotoPath));
-      } catch(err){
-        console.error("Error parseando CSV:", err);
-        resolve([]);
-      }
-    };
-    reader.onerror = () => resolve([]);
-    reader.readAsText(file, "UTF-8");
-  });
-}
-
+/* ── FILE UPLOAD ──────────────────────────────────────────── */
 async function handleFileUpload(event){
-  const file = event.target.files?.[0];
-  if(!file) return;
-  const extension = getFileExtension(file.name);
-  if(!ALLOWED_FILE_EXTENSIONS.includes(extension)){
-    alert("Formato no permitido. Usa JPG, PNG, PDF, Excel o CSV.");
-    event.target.value = ""; return;
+  const file=event.target.files?.[0]; if(!file)return;
+  const ext=getFileExtension(file.name);
+  if(!ALLOWED_FILE_EXTENSIONS.includes(ext)){alert("Formato no permitido.");event.target.value="";return;}
+  if(file.size>MAX_FILE_SIZE_MB*1024*1024){alert(`Máximo ${MAX_FILE_SIZE_MB} MB.`);event.target.value="";return;}
+  if(typeof window.supabaseClient==="undefined"){alert("Supabase no está configurado.");event.target.value="";return;}
+  if(["xls","xlsx","csv"].includes(ext)&&typeof window.XLSX==="undefined"){alert("Librería Excel no cargada.");event.target.value="";return;}
+  const isSheet=["xls","xlsx"].includes(ext),isCSV=ext==="csv";
+  let rows=[];
+  if(isSheet||isCSV){ rows=isCSV?await parseCSV(file,null):await parseSpreadsheet(file,null); if(!rows.length){alert("No se encontraron filas reconocibles.");event.target.value="";return;} }
+  const safeName=sanitizeFileName(file.name),group=getFileGroup(ext),path=`junquillar/${group}/${Date.now()}-${safeName}`;
+  const{data:up,error:ue}=await window.supabaseClient.storage.from(BUCKET_NAME).upload(path,file,{cacheControl:"3600",upsert:false,contentType:file.type||undefined});
+  if(ue){alert(`Error subiendo: ${ue.message}`);event.target.value="";return;}
+  const stored=up.path;
+  if(isSheet||isCSV){
+    rows.forEach(r=>r.foto_path=stored);
+    let ins=0;
+    for(let i=0;i<rows.length;i+=50){const b=rows.slice(i,i+50);const{error}=await window.supabaseClient.from("gastos_junquillar_app").insert(b);if(error){alert(`Insertados ${ins}, luego error: ${error.message}`);event.target.value="";await loadData();return;}ins+=b.length;}
+    alert(`✅ ${ins} registros importados.`);event.target.value="";await loadData();return;
   }
-  if(file.size > MAX_FILE_SIZE_MB * 1024 * 1024){
-    alert(`El archivo supera el máximo permitido de ${MAX_FILE_SIZE_MB} MB.`);
-    event.target.value = ""; return;
-  }
-  if(typeof window.supabaseClient === "undefined"){
-    alert("Supabase no está configurado.");
-    event.target.value = ""; return;
-  }
-  if((["xls","xlsx","csv"].includes(extension)) && typeof window.XLSX === "undefined"){
-    alert("La librería para leer Excel no está cargada. Verifica tu conexión a internet.");
-    event.target.value = ""; return;
-  }
-  const isSpreadsheet = ["xls","xlsx"].includes(extension);
-  const isCSV = extension === "csv";
-  let gastoRows = [];
-  if(isSpreadsheet || isCSV){
-    gastoRows = isCSV
-      ? await parseCSV(file, null)
-      : await parseSpreadsheet(file, null);
-    if(!gastoRows.length){
-      alert("No se encontraron filas con datos reconocibles en el archivo.\n\nAsegúrate de que el Excel tenga encabezados en la fila 2:\nFecha | Proveedor | RUT | Tipo | Nº Documento | Neto | IVA | Total | Categoría | Método de Pago");
-      event.target.value = ""; return;
-    }
-  }
-  const safeName  = sanitizeFileName(file.name);
-  const fileGroup = getFileGroup(extension);
-  const filePath  = `junquillar/${fileGroup}/${Date.now()}-${safeName}`;
-  const { data: uploadData, error: uploadError } = await window.supabaseClient.storage
-    .from(BUCKET_NAME)
-    .upload(filePath, file, { cacheControl:"3600", upsert:false, contentType: file.type || undefined });
-  if(uploadError){
-    console.error("Error subiendo archivo:", uploadError);
-    alert(`No se pudo subir el archivo: ${uploadError.message}`);
-    event.target.value = ""; return;
-  }
-  const storedPath = uploadData.path;
-  if(isSpreadsheet || isCSV){
-    gastoRows.forEach(r => r.foto_path = storedPath);
-    const BATCH = 50;
-    let inserted = 0;
-    for(let i = 0; i < gastoRows.length; i += BATCH){
-      const batch = gastoRows.slice(i, i + BATCH);
-      const { error } = await window.supabaseClient
-        .from("gastos_junquillar_app")
-        .insert(batch);
-      if(error){
-        console.error("Error insertando lote:", error);
-        alert(`Se insertaron ${inserted} filas, luego error: ${error.message}`);
-        event.target.value = "";
-        await loadData(); return;
-      }
-      inserted += batch.length;
-    }
-    alert(`✅ ${inserted} registros importados desde "${file.name}".`);
-    event.target.value = "";
-    await loadData(); return;
-  }
-  const { error: insertError } = await window.supabaseClient
-    .from("gastos_junquillar_app")
-    .insert({
-      fecha:       new Date().toISOString().slice(0,10),
-      proyecto:    PROJECT_NAME,
-      observacion: `Archivo adjunto: ${file.name}`,
-      estado_ocr:  "pendiente",
-      foto_path:   storedPath
-    });
-  if(insertError){
-    console.error("Error creando registro:", insertError);
-    alert(`Archivo subido pero no se pudo crear el registro: ${insertError.message}`);
-    event.target.value = ""; return;
-  }
-  alert("📎 Archivo adjuntado correctamente.");
-  event.target.value = "";
-  await loadData();
+  const{error:ie}=await window.supabaseClient.from("gastos_junquillar_app").insert({fecha:new Date().toISOString().slice(0,10),proyecto:PROJECT_NAME,observacion:`Archivo: ${file.name}`,estado_ocr:"pendiente",foto_path:stored});
+  if(ie){alert(`Archivo subido pero error al registrar: ${ie.message}`);event.target.value="";return;}
+  alert("📎 Archivo adjuntado.");event.target.value="";await loadData();
 }
 function setupFileUpload(){
-  const input = $("file-input");
-  const selectLink = $("select-file-link");
-  const btnAdjuntar = $("btn-adjuntar");
-  const btnFoto = $("btn-foto");
-  const dropzone = $("dropzone");
-  if(!input) return;
-  input.addEventListener("change", handleFileUpload);
-  if(selectLink) selectLink.addEventListener("click", () => input.click());
-  if(btnAdjuntar) btnAdjuntar.addEventListener("click", () => input.click());
-  if(btnFoto) btnFoto.addEventListener("click", () => input.click());
-  if(dropzone){
-    dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("drag-over"); });
-    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag-over"));
-    dropzone.addEventListener("drop", async e => {
-      e.preventDefault(); dropzone.classList.remove("drag-over");
-      const file = e.dataTransfer?.files?.[0];
-      if(!file) return;
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      input.files = dt.files;
-      await handleFileUpload({ target: input });
-    });
+  const input=$("file-input");if(!input)return;
+  input.addEventListener("change",handleFileUpload);
+  $("select-file-link")?.addEventListener("click",()=>input.click());
+  $("btn-adjuntar")?.addEventListener("click",()=>input.click());
+  $("btn-foto")?.addEventListener("click",()=>input.click());
+  const dz=$("dropzone");
+  if(dz){
+    dz.addEventListener("dragover",e=>{e.preventDefault();dz.classList.add("drag-over");});
+    dz.addEventListener("dragleave",()=>dz.classList.remove("drag-over"));
+    dz.addEventListener("drop",async e=>{e.preventDefault();dz.classList.remove("drag-over");const f=e.dataTransfer?.files?.[0];if(!f)return;const dt=new DataTransfer();dt.items.add(f);input.files=dt.files;await handleFileUpload({target:input});});
   }
 }
 
+/* ── LOAD DATA ────────────────────────────────────────────── */
 async function loadData(){
-  if(typeof window.supabaseClient === "undefined"){
-    console.warn("Supabase no está configurado. Dashboard vacío.");
-    gastos = []; filteredDocs = []; renderAll(); return;
-  }
-  const { data, error } = await window.supabaseClient
-    .from("gastos_junquillar_app")
-    .select("*")
-    .eq("proyecto", PROJECT_NAME)
-    .order("fecha", { ascending:false })
-    .order("created_at", { ascending:false });
-  if(error){ console.error("Error cargando gastos:", error); gastos=[]; filteredDocs=[]; renderAll(); return; }
-  gastos = (data || []).map(mapSupabaseRow);
-  filteredDocs = [...gastos];
+  if(typeof window.supabaseClient==="undefined"){gastos=[];filteredDocs=[];renderAll();return;}
+  const{data,error}=await window.supabaseClient.from("gastos_junquillar_app").select("*").eq("proyecto",PROJECT_NAME).order("fecha",{ascending:false}).order("created_at",{ascending:false});
+  if(error){console.error(error);gastos=[];filteredDocs=[];renderAll();return;}
+  gastos=(data||[]).map(mapSupabaseRow);filteredDocs=[...gastos];
+  await loadBudget();
   renderAll();
 }
 
+/* ── PRESUPUESTO EDITABLE (Supabase config table) ─────────── */
+async function loadBudget(){
+  if(typeof window.supabaseClient==="undefined") return;
+  try{
+    const{data}=await window.supabaseClient.from("junqo_config").select("value").eq("key",BUDGET_KEY).single();
+    if(data?.value) PROJECT_BUDGET=Number(data.value)||180000000;
+  }catch(e){}
+}
+async function saveBudget(val){
+  if(typeof window.supabaseClient==="undefined"){PROJECT_BUDGET=val;renderAll();return;}
+  await window.supabaseClient.from("junqo_config").upsert({key:BUDGET_KEY,value:String(val),proyecto:PROJECT_NAME},{onConflict:"key"});
+  PROJECT_BUDGET=val;renderAll();
+}
+function renderBudgetEditor(){
+  const el=$("budget-editor");if(!el)return;
+  el.innerHTML=`
+    <div class="budget-edit-row">
+      <span class="budget-edit-label">Presupuesto del proyecto</span>
+      <div class="budget-edit-controls">
+        <input type="text" id="budget-input" class="budget-input" value="${PROJECT_BUDGET.toLocaleString("es-CL")}" placeholder="180.000.000"/>
+        <button class="budget-save-btn" id="btn-save-budget">Guardar</button>
+      </div>
+    </div>`;
+  $("btn-save-budget")?.addEventListener("click",async()=>{
+    const raw=String($("budget-input")?.value||"").replace(/\./g,"").replace(",",".");
+    const val=Number(raw);
+    if(!val||val<1000){alert("Ingresa un presupuesto válido.");return;}
+    await saveBudget(val);
+    alert(`✅ Presupuesto actualizado a ${formatoCLP(val)}`);
+  });
+}
+
+/* ── KPIs ─────────────────────────────────────────────────── */
 function renderKPIs(){
-  const el = $("section-kpis"); if(!el) return;
-  const t = getTotals(); const avance = PROJECT_BUDGET ? (t.neto / PROJECT_BUDGET) * 100 : 0;
-  const kpis = [
-    ["Inversión total neta", formatoCLP(t.neto), formatoPct(avance), `${t.docs} documentos registrados`],
-    ["IVA crédito fiscal", formatoCLP(t.iva), t.iva > 0 ? "CF" : "0", "Calculado desde IVA registrado"],
-    ["Total documentos", formatoCLP(t.total), `${t.proveedores} prov.`, "Total bruto acumulado"],
-    ["Pendientes OCR", String(t.pendientesOcr), t.pendientesOcr > 0 ? "pend." : "ok", `${t.sinProveedor} registros sin proveedor`]
-  ];
-  el.innerHTML = kpis.map(k => `<div class="kpi-card"><div class="kpi-top"><div><div class="kpi-title">${k[0]}</div><div class="kpi-value">${k[1]}</div></div><span class="badge up">${k[2]}</span></div><div class="kpi-footer">${k[3]}</div></div>`).join("");
-  const sidebarBig = document.querySelector(".sidebar-card .big");
-  const sidebarSub = document.querySelector(".sidebar-card .sub");
-  const sidebarFill = document.querySelector(".sidebar-card .progress-fill");
-  if(sidebarBig) sidebarBig.textContent = formatoPct(avance);
-  if(sidebarSub) sidebarSub.textContent = `${formatoCLP(t.neto)} de ${formatoCLP(PROJECT_BUDGET)} ejecutado`;
-  if(sidebarFill) sidebarFill.style.width = `${Math.min(avance,100)}%`;
+  const el=$("section-kpis");if(!el)return;
+  const t=getTotals(),avance=PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0;
+  el.innerHTML=[
+    ["Inversión total neta",formatoCLP(t.neto),formatoPct(avance),`${t.docs} documentos registrados`],
+    ["IVA crédito fiscal",formatoCLP(t.iva),t.iva>0?"CF":"0","Calculado desde IVA registrado"],
+    ["Total documentos",formatoCLP(t.total),`${t.proveedores} prov.`,"Total bruto acumulado"],
+    ["Pendientes OCR",String(t.pendientesOcr),t.pendientesOcr>0?"pend.":"ok",`${t.sinProveedor} sin proveedor`]
+  ].map(k=>`<div class="kpi-card"><div class="kpi-top"><div><div class="kpi-title">${k[0]}</div><div class="kpi-value">${k[1]}</div></div><span class="badge up">${k[2]}</span></div><div class="kpi-footer">${k[3]}</div></div>`).join("");
+  const sf=document.querySelector(".sidebar-card .progress-fill");
+  const sb=document.querySelector(".sidebar-card .big");
+  const ss=document.querySelector(".sidebar-card .sub");
+  if(sf)sf.style.width=`${Math.min(avance,100)}%`;
+  if(sb)sb.textContent=formatoPct(avance);
+  if(ss)ss.textContent=`${formatoCLP(t.neto)} de ${formatoCLP(PROJECT_BUDGET)} ejecutado`;
 }
 function renderAlerts(){
-  const el = $("alerts-list"); if(!el) return;
-  if(!gastos.length){ el.innerHTML = emptyState("Sin alertas. No hay gastos registrados."); return; }
-  const t = getTotals();
-  const alerts = [
-    ["📄", `${t.pendientesOcr} documentos pendientes OCR`, "Registros que aún requieren lectura o revisión documental."],
-    ["⚠️", `${t.sinProveedor} registros incompletos`, "Gastos sin proveedor registrado o con datos pendientes."],
-    ["💵", `${formatoCLP(t.iva)} de IVA crédito fiscal`, "Monto calculado desde los documentos registrados."],
-    ["📊", `${formatoPct(PROJECT_BUDGET ? (t.neto/PROJECT_BUDGET)*100 : 0)} de avance financiero`, "Avance calculado contra presupuesto referencial."]
-  ];
-  el.innerHTML = alerts.map(a => `<div class="alert-item"><div class="alert-icon">${a[0]}</div><div><div class="alert-title">${a[1]}</div><div class="alert-sub">${a[2]}</div></div></div>`).join("");
+  const el=$("alerts-list");if(!el)return;
+  if(!gastos.length){el.innerHTML=emptyState("Sin alertas.");return;}
+  const t=getTotals();
+  el.innerHTML=[
+    ["📄",`${t.pendientesOcr} documentos pendientes OCR`,"Registros que requieren revisión documental."],
+    ["⚠️",`${t.sinProveedor} registros incompletos`,"Gastos sin proveedor registrado."],
+    ["💵",`${formatoCLP(t.iva)} de IVA crédito fiscal`,"Monto calculado desde los documentos."],
+    ["📊",`${formatoPct(PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0)} de avance financiero`,"Avance calculado contra presupuesto."]
+  ].map(a=>`<div class="alert-item"><div class="alert-icon">${a[0]}</div><div><div class="alert-title">${a[1]}</div><div class="alert-sub">${a[2]}</div></div></div>`).join("");
 }
 function renderBottomCards(){
-  const el = $("section-bottom"); if(!el) return;
-  const t = getTotals(); const ultima = gastos.length ? normalizarFecha(gastos[0].fecha) : "—";
-  const cards = [["Proveedores",t.proveedores,"Únicos registrados","🏢"],["Último registro",ultima,"Según fecha de gasto","📅"],["Total bruto",formatoCLP(t.total),"Neto + IVA","💼"],["Avance presupuesto",formatoPct(PROJECT_BUDGET ? (t.neto/PROJECT_BUDGET)*100 : 0),"Contra presupuesto referencial","📈"]];
-  el.innerHTML = cards.map(c => `<div class="bottom-card"><div class="bottom-top"><div class="bottom-label">${c[0]}</div><div class="bottom-icon">${c[3]}</div></div><div class="bottom-value">${c[1]}</div><div class="bottom-sub">${c[2]}</div></div>`).join("");
+  const el=$("section-bottom");if(!el)return;
+  const t=getTotals(),ultima=gastos.length?normalizarFecha(gastos[0].fecha):"—";
+  el.innerHTML=[
+    ["Proveedores",t.proveedores,"Únicos registrados","🏢"],
+    ["Último registro",ultima,"Según fecha de gasto","📅"],
+    ["Total bruto",formatoCLP(t.total),"Neto + IVA","💼"],
+    ["Avance presupuesto",formatoPct(PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0),"Contra presupuesto","📈"]
+  ].map(c=>`<div class="bottom-card"><div class="bottom-top"><div class="bottom-label">${c[0]}</div><div class="bottom-icon">${c[3]}</div></div><div class="bottom-value">${c[1]}</div><div class="bottom-sub">${c[2]}</div></div>`).join("");
 }
-function renderDocs(limit = docsVisibleLimit){
-  const el=$("docs-table"), subtitle=$("docs-subtitle"), btn=$("load-more-btn"); if(!el) return;
-  if(subtitle) subtitle.textContent = `${filteredDocs.length} registros · datos cargados desde Supabase`;
-  if(!filteredDocs.length){ el.innerHTML = emptyState("No hay gastos registrados en Supabase."); if(btn) btn.style.display="none"; return; }
-  el.innerHTML = filteredDocs.slice(0, limit).map(docRowFromGasto).map(d => `<div class="table-row gastos-row"><div>${d.date}</div><div><div class="doc-name">${d.name}</div><div class="doc-amount">${d.observacion || ""}</div></div><div>${d.rut}</div><div>${d.tipo}</div><div><span class="cat-badge ${d.catCls}">${d.cat}</span></div><div>${d.costo}</div><div>${d.iva}</div><div>${d.total}</div><div>${d.cf}</div><div>${d.pago}</div><div>${d.fotoPath ? "📎" : "—"}</div></div>`).join("");
-  if(btn) btn.style.display = filteredDocs.length > limit ? "inline-flex" : "none";
+
+/* ── GASTOS TABLE ─────────────────────────────────────────── */
+function renderDocs(limit=docsVisibleLimit){
+  const el=$("docs-table"),sub=$("docs-subtitle"),btn=$("load-more-btn");if(!el)return;
+  if(sub)sub.textContent=`${filteredDocs.length} registros · datos cargados desde Supabase`;
+  if(!filteredDocs.length){el.innerHTML=emptyState("No hay gastos registrados.");if(btn)btn.style.display="none";return;}
+  el.innerHTML=filteredDocs.slice(0,limit).map(g=>{
+    const d=normalizarFecha(g.fecha);
+    const fotoUrl=g.foto_path?getFotoUrl(g.foto_path):null;
+    return`<div class="table-row gastos-row">
+      <div>${d}</div>
+      <div><div class="doc-name">${g.proveedor||"Pendiente OCR"}</div><div class="doc-amount">${g.observacion||""}</div></div>
+      <div style="font-size:11px;color:#94a3b8">${g.rut||"—"}</div>
+      <div style="font-size:12px;color:#64748b">${g.tipo_documento||"—"}</div>
+      <div><span class="cat-badge ${getCategoriaClass(g.categoria)}">${g.categoria||"Sin categoría"}</span></div>
+      <div>${formatoCLP(g.neto)}</div>
+      <div>${g.iva?formatoCLP(g.iva):"—"}</div>
+      <div>${g.total?formatoCLP(g.total):"—"}</div>
+      <div style="text-align:center">${numberValue(g.iva)>0?"✔":"—"}</div>
+      <div style="font-size:12px;color:#64748b">${g.metodo_pago||"—"}</div>
+      <div class="doc-actions">
+        ${fotoUrl?`<button class="action-btn" title="Ver comprobante" onclick="window.open('${fotoUrl}','_blank')">📎</button>`:`<span style="color:#cbd5e1;font-size:12px">—</span>`}
+        <button class="action-btn" title="Editar" onclick="openEditModal('${g.id}')">✏️</button>
+        <button class="action-btn" title="Eliminar" onclick="confirmDelete('${g.id}','${(g.proveedor||"").replace(/'/g,"\\'")}')">🗑️</button>
+      </div>
+    </div>`;
+  }).join("");
+  if(btn)btn.style.display=filteredDocs.length>limit?"inline-flex":"none";
 }
+
+function getFotoUrl(path){
+  if(!path||typeof window.supabaseClient==="undefined") return null;
+  try{
+    const{data}=window.supabaseClient.storage.from(BUCKET_NAME).getPublicUrl(path);
+    return data?.publicUrl||null;
+  }catch(e){return null;}
+}
+
+/* ── FILTROS (unificados, funcionan en Gastos) ────────────── */
 function applyFilters(){
-  const text = (($("filter-text")?.value || $("filter-text-gastos")?.value || $("global-search")?.value || "")).toLowerCase().trim();
-  const cat = $("filter-cat")?.value || ""; const tipo=$("filter-tipo")?.value || ""; const desde=$("filter-desde")?.value || ""; const hasta=$("filter-hasta")?.value || ""; const pago=$("filter-pago")?.value || "";
-  filteredDocs = gastos.filter(g => {
-    const hayTexto = [g.proveedor,g.rut,g.tipo_documento,g.numero_documento,g.categoria,g.metodo_pago,g.observacion].join(" ").toLowerCase(); const f = fechaOrdenable(g.fecha);
-    if(text && !hayTexto.includes(text)) return false; if(cat && g.categoria !== cat) return false; if(tipo && g.tipo_documento !== tipo) return false; if(pago && g.metodo_pago !== pago) return false; if(desde && f < desde) return false; if(hasta && f > hasta) return false; return true;
+  const text=(($("filter-text-gastos")?.value||$("global-search")?.value||"")).toLowerCase().trim();
+  const cat=$("filter-cat-gastos")?.value||"";
+  const tipo=$("filter-tipo-gastos")?.value||"";
+  const desde=$("filter-desde-gastos")?.value||"";
+  const hasta=$("filter-hasta-gastos")?.value||"";
+  const pago=$("filter-pago-gastos")?.value||"";
+  filteredDocs=gastos.filter(g=>{
+    const hay=[g.proveedor,g.rut,g.tipo_documento,g.numero_documento,g.categoria,g.metodo_pago,g.observacion].join(" ").toLowerCase();
+    const f=fechaOrdenable(g.fecha);
+    if(text&&!hay.includes(text))return false;
+    if(cat&&g.categoria!==cat)return false;
+    if(tipo&&g.tipo_documento!==tipo)return false;
+    if(pago&&g.metodo_pago!==pago)return false;
+    if(desde&&f<desde)return false;
+    if(hasta&&f>hasta)return false;
+    return true;
   });
-  docsVisibleLimit=10; renderDocs();
+  docsVisibleLimit=10;renderDocs();
 }
 function clearFilters(){
-  ["filter-text","filter-text-gastos","global-search","filter-cat","filter-tipo","filter-desde","filter-hasta","filter-pago"].forEach(id => { const el=$(id); if(el) el.value=""; });
-  filteredDocs=[...gastos]; docsVisibleLimit=10; renderDocs();
+  ["filter-text-gastos","filter-cat-gastos","filter-tipo-gastos","filter-desde-gastos","filter-hasta-gastos","filter-pago-gastos","global-search"].forEach(id=>{const el=$(id);if(el)el.value="";});
+  filteredDocs=[...gastos];docsVisibleLimit=10;renderDocs();
 }
+
+/* ── EDIT / DELETE MODAL ──────────────────────────────────── */
+function openEditModal(id){
+  const g=gastos.find(x=>String(x.id)===String(id));if(!g)return;
+  editModalGasto=g;
+  const m=$("edit-modal");if(!m)return;
+  $("em-fecha").value=g.fecha||"";
+  $("em-proveedor").value=g.proveedor||"";
+  $("em-rut").value=g.rut||"";
+  $("em-tipo").value=g.tipo_documento||"";
+  $("em-ndoc").value=g.numero_documento||"";
+  $("em-neto").value=g.neto||"";
+  $("em-iva").value=g.iva||"";
+  $("em-total").value=g.total||"";
+  $("em-cat").value=g.categoria||"";
+  $("em-pago").value=g.metodo_pago||"";
+  $("em-obs").value=g.observacion||"";
+  m.classList.remove("modal-hidden");
+}
+function closeEditModal(){ $("edit-modal")?.classList.add("modal-hidden"); editModalGasto=null; }
+async function saveEditModal(){
+  if(!editModalGasto)return;
+  const updates={
+    fecha:$("em-fecha")?.value||editModalGasto.fecha,
+    proveedor:$("em-proveedor")?.value||null,
+    rut:$("em-rut")?.value||null,
+    tipo_documento:$("em-tipo")?.value||null,
+    numero_documento:$("em-ndoc")?.value||null,
+    neto:toNum($("em-neto")?.value)||0,
+    iva:toNum($("em-iva")?.value)||0,
+    total:toNum($("em-total")?.value)||0,
+    categoria:$("em-cat")?.value||null,
+    metodo_pago:$("em-pago")?.value||null,
+    observacion:$("em-obs")?.value||null
+  };
+  if(typeof window.supabaseClient==="undefined"){alert("Sin conexión a Supabase.");return;}
+  const{error}=await window.supabaseClient.from("gastos_junquillar_app").update(updates).eq("id",editModalGasto.id);
+  if(error){alert(`Error guardando: ${error.message}`);return;}
+  closeEditModal();await loadData();
+}
+async function confirmDelete(id,nombre){
+  if(!confirm(`¿Eliminar el gasto de "${nombre}"?\nEsta acción no se puede deshacer.`))return;
+  if(typeof window.supabaseClient==="undefined"){alert("Sin conexión.");return;}
+  const{error}=await window.supabaseClient.from("gastos_junquillar_app").delete().eq("id",id);
+  if(error){alert(`Error eliminando: ${error.message}`);return;}
+  await loadData();
+}
+
+/* ── PROVEEDORES ──────────────────────────────────────────── */
 function renderProveedores(){
-  const el=$("proveedores-table"); if(!el) return; if(!gastos.length){ el.innerHTML=emptyState("Sin proveedores. No hay gastos registrados."); return; }
-  const groups=groupBy(gastos,g=>g.proveedor||"Pendiente OCR"), totalNeto=sumBy(gastos,"neto");
-  el.innerHTML = Object.entries(groups).map(([name,rows]) => ({name, rut:rows.find(r=>r.rut)?.rut||"—", cat:rows.find(r=>r.categoria)?.categoria||"Sin categoría", docs:rows.length, costo:sumBy(rows,"neto"), iva:sumBy(rows,"iva")})).sort((a,b)=>b.costo-a.costo).slice(0,20).map((p,i)=>`<div class="table-row prov-row"><div>${i+1}</div><div class="doc-name">${p.name}</div><div>${p.rut}</div><div><span class="cat-badge ${getCategoriaClass(p.cat)}">${p.cat}</span></div><div>${p.docs}</div><div>${formatoCLP(p.costo)}</div><div>${formatoCLP(p.iva)}</div><div>${formatoPct(totalNeto ? (p.costo/totalNeto)*100 : 0)}</div></div>`).join("");
+  const el=$("proveedores-table");if(!el)return;
+  if(!gastos.length){el.innerHTML=emptyState("Sin proveedores.");return;}
+  const groups=groupBy(gastos,g=>g.proveedor||"Pendiente OCR"),totalNeto=sumBy(gastos,"neto");
+  el.innerHTML=Object.entries(groups).map(([name,rows])=>({name,rut:rows.find(r=>r.rut)?.rut||"—",cat:rows.find(r=>r.categoria)?.categoria||"Sin categoría",docs:rows.length,costo:sumBy(rows,"neto"),iva:sumBy(rows,"iva")})).sort((a,b)=>b.costo-a.costo).slice(0,20).map((p,i)=>`<div class="table-row prov-row"><div>${i+1}</div><div class="doc-name">${p.name}</div><div>${p.rut}</div><div><span class="cat-badge ${getCategoriaClass(p.cat)}">${p.cat}</span></div><div>${p.docs}</div><div>${formatoCLP(p.costo)}</div><div>${formatoCLP(p.iva)}</div><div>${formatoPct(totalNeto?(p.costo/totalNeto)*100:0)}</div></div>`).join("");
 }
-function renderCaja(){ renderCajaKpis(); renderCajaTipos(); renderCajaMensual(); }
+
+/* ── CAJA ─────────────────────────────────────────────────── */
+function renderCaja(){renderCajaKpis();renderCajaTipos();renderCajaMensual();}
 function renderCajaKpis(){
-  const el=$("caja-kpis"); if(!el) return; const t=getTotals(); const docsConIva = gastos.filter(g=>numberValue(g.iva)>0).length;
-  const cards = [["Costo neto registrado",formatoCLP(t.neto),`${t.docs} documentos registrados`],["IVA crédito fiscal",formatoCLP(t.iva),"Calculado desde IVA registrado"],["Total documentos",formatoCLP(t.total),"Neto + IVA"],["Docs con IVA",docsConIva,"Documentos con crédito fiscal"]];
-  el.innerHTML = cards.map(c=>`<div class="kpi-card"><div class="kpi-top"><div><div class="kpi-title">${c[0]}</div><div class="kpi-value">${c[1]}</div></div></div><div class="kpi-footer">${c[2]}</div></div>`).join("");
+  const el=$("caja-kpis");if(!el)return;
+  const t=getTotals(),docsConIva=gastos.filter(g=>numberValue(g.iva)>0).length;
+  el.innerHTML=[["Costo neto registrado",formatoCLP(t.neto),`${t.docs} documentos`],["IVA crédito fiscal",formatoCLP(t.iva),"Desde IVA registrado"],["Total documentos",formatoCLP(t.total),"Neto + IVA"],["Docs con IVA",docsConIva,"Con crédito fiscal"]].map(c=>`<div class="kpi-card"><div class="kpi-top"><div><div class="kpi-title">${c[0]}</div><div class="kpi-value">${c[1]}</div></div></div><div class="kpi-footer">${c[2]}</div></div>`).join("");
 }
 function renderCajaTipos(){
-  const el=$("caja-tipos"); if(!el) return; if(!gastos.length){ el.innerHTML=emptyState("Sin información tributaria. No hay gastos registrados."); return; }
-  const groups=groupBy(gastos,g=>g.tipo_documento||"Sin tipo");
-  el.innerHTML=Object.entries(groups).map(([tipo,rows])=>`<div class="table-row caja-tipos-row"><div>${tipo}</div><div>${rows.length}</div><div>${formatoCLP(sumBy(rows,"neto"))}</div><div>${formatoCLP(sumBy(rows,"iva"))}</div><div>${sumBy(rows,"iva")>0?"✔":"—"}</div><div>${sumBy(rows,"iva")>0?"IVA Crédito Fiscal registrado":"Sin IVA registrado"}</div></div>`).join("");
+  const el=$("caja-tipos");if(!el)return;
+  if(!gastos.length){el.innerHTML=emptyState("Sin información.");return;}
+  const g=groupBy(gastos,x=>x.tipo_documento||"Sin tipo");
+  el.innerHTML=Object.entries(g).map(([tipo,rows])=>`<div class="table-row caja-tipos-row"><div>${tipo}</div><div>${rows.length}</div><div>${formatoCLP(sumBy(rows,"neto"))}</div><div>${formatoCLP(sumBy(rows,"iva"))}</div><div>${sumBy(rows,"iva")>0?"✔":"—"}</div><div>${sumBy(rows,"iva")>0?"IVA CF":"Sin IVA"}</div></div>`).join("");
 }
 function renderCajaMensual(){
-  const el=$("caja-mensual"); if(!el) return; if(!gastos.length){ el.innerHTML=emptyState("Sin detalle mensual."); return; }
-  const groups=groupBy(gastos,g=>mesLabel(g.fecha)); let acum=0;
-  el.innerHTML=Object.entries(groups).sort(([a],[b])=>a.localeCompare(b)).map(([mes,rows])=>{ const iva=sumBy(rows,"iva"); acum+=iva; return `<div class="table-row caja-mensual-row"><div>${mes}</div><div>${rows.filter(r=>numberValue(r.iva)>0).length}</div><div>${formatoCLP(sumBy(rows,"neto"))}</div><div>${formatoCLP(iva)}</div><div>${formatoCLP(acum)}</div></div>`; }).join("");
-}
-function renderBalance(){
-  const el = $("balance-table");
-  if(!el) return;
-  const t = getTotals();
-  if(!gastos.length){
-    el.innerHTML = emptyState("Balance sin movimientos. No hay gastos registrados.");
-    return;
-  }
-  const TERRENO      = 100000000;
-  const APORTE_SOCIO =  60000000;
-  const activoTerreno = TERRENO;
-  const activoObra    = t.neto;
-  const activoIvaCF   = t.iva;
-  const totalActivo   = activoTerreno + activoObra + activoIvaCF;
-  const pasivoSocio   = APORTE_SOCIO;
-  const pasivoGastos  = t.total;
-  const totalPasivo   = pasivoSocio + pasivoGastos;
-  const diferencia = totalActivo - totalPasivo;
-  const clp = v => formatoCLP(v);
-  const z   = () => `<span style="color:#94a3b8">$0</span>`;
-  const cell = (v, color) => {
-    if(!v || v === 0) return z();
-    const s = clp(v);
-    return color ? `<span style="color:${color};font-weight:600">${s}</span>` : s;
-  };
-  const row = (n, cuenta, debe, haber, deudor, acreedor, activo, pasivo, perdida, ganancia, extra="") =>
-    `<div class="bal-row${extra}">
-      <div class="bal-n">${n}</div>
-      <div class="bal-cuenta">${cuenta}</div>
-      <div class="bal-num">${cell(debe)}</div>
-      <div class="bal-num">${cell(haber)}</div>
-      <div class="bal-num">${cell(deudor)}</div>
-      <div class="bal-num">${cell(acreedor)}</div>
-      <div class="bal-num">${cell(activo, "#059669")}</div>
-      <div class="bal-num">${cell(pasivo)}</div>
-      <div class="bal-num">${cell(perdida, "#e11d48")}</div>
-      <div class="bal-num">${cell(ganancia, "#059669")}</div>
-    </div>`;
-  const secHead = label =>
-    `<div class="bal-section">${label}</div>`;
-  el.innerHTML = `
-    <div class="bal-wrap">
-      <div class="bal-group-head">
-        <div class="bal-gh-spacer"></div>
-        <div class="bal-gh-group">MOVIMIENTOS</div>
-        <div class="bal-gh-group">SALDOS</div>
-        <div class="bal-gh-group">BALANCE</div>
-        <div class="bal-gh-group">RESULTADOS</div>
-      </div>
-      <div class="bal-col-head">
-        <div class="bal-n">N°</div>
-        <div class="bal-cuenta">Cuenta</div>
-        <div class="bal-num">DEBE</div>
-        <div class="bal-num">HABER</div>
-        <div class="bal-num">DEUDOR</div>
-        <div class="bal-num">ACREEDOR</div>
-        <div class="bal-num">ACTIVO</div>
-        <div class="bal-num">PASIVO</div>
-        <div class="bal-num">PÉRDIDA</div>
-        <div class="bal-num">GANANCIA</div>
-      </div>
-      ${secHead("ACTIVOS")}
-      ${row("1", "Terreno (Valor de adquisición)", activoTerreno, 0, activoTerreno, 0, activoTerreno, 0, 0, 0)}
-      ${row("2", "Obra en Curso (Costos netos)", activoObra, 0, activoObra, 0, activoObra, 0, 0, 0)}
-      ${row("3", "IVA Crédito Fiscal", activoIvaCF, 0, activoIvaCF, 0, activoIvaCF, 0, 0, 0)}
-      ${secHead("PASIVOS")}
-      ${row("4", "Cuenta por pagar al Socio", 0, pasivoSocio, 0, pasivoSocio, 0, pasivoSocio, 0, 0)}
-      ${row("5", "Gastos por pagar / Cuentas por pagar", 0, pasivoGastos, 0, pasivoGastos, 0, pasivoGastos, 0, 0)}
-      ${diferencia !== 0 ? row("6",
-          diferencia > 0 ? "Capital / Patrimonio pendiente" : "Ajuste por diferencia",
-          diferencia > 0 ? diferencia : 0,
-          diferencia < 0 ? Math.abs(diferencia) : 0,
-          diferencia > 0 ? diferencia : 0,
-          diferencia < 0 ? Math.abs(diferencia) : 0,
-          0, 0,
-          diferencia < 0 ? Math.abs(diferencia) : 0,
-          diferencia > 0 ? diferencia : 0) : ""}
-      <div class="bal-row bal-total">
-        <div class="bal-n"></div>
-        <div class="bal-cuenta">TOTAL</div>
-        <div class="bal-num">${clp(totalActivo)}</div>
-        <div class="bal-num">${clp(totalPasivo + (diferencia > 0 ? diferencia : 0))}</div>
-        <div class="bal-num">${clp(totalActivo)}</div>
-        <div class="bal-num">${clp(totalPasivo + (diferencia > 0 ? diferencia : 0))}</div>
-        <div class="bal-num">${clp(totalActivo)}</div>
-        <div class="bal-num">${clp(totalPasivo)}</div>
-        <div class="bal-num">$0</div>
-        <div class="bal-num">$0</div>
-      </div>
-    </div>
-  `;
-  const prevNote = el.parentElement.querySelector(".balance-note");
-  if(prevNote) prevNote.remove();
-  el.insertAdjacentHTML("afterend",
-    `<div class="balance-note">⚠️ Valores calculados automáticamente desde documentos registrados. No reemplaza revisión contable formal.</div>`
-  );
+  const el=$("caja-mensual");if(!el)return;
+  if(!gastos.length){el.innerHTML=emptyState("Sin detalle.");return;}
+  const g=groupBy(gastos,x=>mesLabel(x.fecha));let acum=0;
+  el.innerHTML=Object.entries(g).sort(([a],[b])=>a.localeCompare(b)).map(([mes,rows])=>{const iva=sumBy(rows,"iva");acum+=iva;return`<div class="table-row caja-mensual-row"><div>${mes}</div><div>${rows.filter(r=>numberValue(r.iva)>0).length}</div><div>${formatoCLP(sumBy(rows,"neto"))}</div><div>${formatoCLP(iva)}</div><div>${formatoCLP(acum)}</div></div>`;}).join("");
 }
 
-function renderControlProyecto(){ renderControlKpis(); renderControlEtapas(); renderControlHitos(); renderControlCat(); }
+/* ── BALANCE ──────────────────────────────────────────────── */
+function renderBalance(){
+  const el=$("balance-table");if(!el)return;
+  const t=getTotals();
+  if(!gastos.length){el.innerHTML=emptyState("Sin movimientos.");return;}
+  const TERRENO=100000000,APORTE=60000000;
+  const aT=TERRENO,aO=t.neto,aI=t.iva,totA=aT+aO+aI;
+  const pS=APORTE,pG=t.total,totP=pS+pG;
+  const diff=totA-totP;
+  const clp=v=>formatoCLP(v),z=()=>`<span style="color:#94a3b8">$0</span>`;
+  const cell=(v,col)=>(!v||v===0)?z():(col?`<span style="color:${col};font-weight:600">${clp(v)}</span>`:clp(v));
+  const row=(n,c,d,h,de,ac,a,p,pe,g,x="")=>`<div class="bal-row${x}"><div class="bal-n">${n}</div><div class="bal-cuenta">${c}</div><div class="bal-num">${cell(d)}</div><div class="bal-num">${cell(h)}</div><div class="bal-num">${cell(de)}</div><div class="bal-num">${cell(ac)}</div><div class="bal-num">${cell(a,"#059669")}</div><div class="bal-num">${cell(p)}</div><div class="bal-num">${cell(pe,"#e11d48")}</div><div class="bal-num">${cell(g,"#059669")}</div></div>`;
+  const sec=l=>`<div class="bal-section">${l}</div>`;
+  el.innerHTML=`<div class="bal-wrap"><div class="bal-group-head"><div class="bal-gh-spacer"></div><div class="bal-gh-group">MOVIMIENTOS</div><div class="bal-gh-group">SALDOS</div><div class="bal-gh-group">BALANCE</div><div class="bal-gh-group">RESULTADOS</div></div><div class="bal-col-head"><div class="bal-n">N°</div><div class="bal-cuenta">Cuenta</div><div class="bal-num">DEBE</div><div class="bal-num">HABER</div><div class="bal-num">DEUDOR</div><div class="bal-num">ACREEDOR</div><div class="bal-num">ACTIVO</div><div class="bal-num">PASIVO</div><div class="bal-num">PÉRDIDA</div><div class="bal-num">GANANCIA</div></div>${sec("ACTIVOS")}${row("1","Terreno",aT,0,aT,0,aT,0,0,0)}${row("2","Obra en Curso",aO,0,aO,0,aO,0,0,0)}${row("3","IVA Crédito Fiscal",aI,0,aI,0,aI,0,0,0)}${sec("PASIVOS")}${row("4","Cuenta por pagar al Socio",0,pS,0,pS,0,pS,0,0)}${row("5","Gastos por pagar",0,pG,0,pG,0,pG,0,0)}${diff!==0?row("6",diff>0?"Capital pendiente":"Ajuste",diff>0?diff:0,diff<0?Math.abs(diff):0,diff>0?diff:0,diff<0?Math.abs(diff):0,0,0,diff<0?Math.abs(diff):0,diff>0?diff:0):""}<div class="bal-row bal-total"><div class="bal-n"></div><div class="bal-cuenta">TOTAL</div><div class="bal-num">${clp(totA)}</div><div class="bal-num">${clp(totP+(diff>0?diff:0))}</div><div class="bal-num">${clp(totA)}</div><div class="bal-num">${clp(totP+(diff>0?diff:0))}</div><div class="bal-num">${clp(totA)}</div><div class="bal-num">${clp(totP)}</div><div class="bal-num">$0</div><div class="bal-num">$0</div></div></div>`;
+  el.parentElement.querySelector(".balance-note")?.remove();
+  el.insertAdjacentHTML("afterend",`<div class="balance-note">⚠️ Valores calculados automáticamente. No reemplaza revisión contable formal.</div>`);
+}
+
+/* ── CONTROL DE PROYECTO ──────────────────────────────────── */
+function renderControlProyecto(){renderControlKpis();renderControlEtapas();renderControlHitos();renderControlCat();}
 function renderControlKpis(){
-  const el=$("control-kpis"); if(!el) return; const t=getTotals(); const avance = PROJECT_BUDGET ? (t.neto/PROJECT_BUDGET)*100 : 0;
-  const cards = [["Avance financiero",formatoPct(avance),`${formatoCLP(t.neto)} ejecutado`],["Presupuesto referencial",formatoCLP(PROJECT_BUDGET),"Base de comparación"],["Saldo estimado",formatoCLP(Math.max(PROJECT_BUDGET-t.neto,0)),"Presupuesto menos neto ejecutado"],["Partidas con gasto",uniqueCount(gastos,"categoria"),"Categorías registradas"]];
-  el.innerHTML = cards.map(c=>`<div class="kpi-card"><div class="kpi-title">${c[0]}</div><div class="kpi-value">${c[1]}</div><div class="kpi-footer">${c[2]}</div></div>`).join("");
+  const el=$("control-kpis");if(!el)return;
+  const t=getTotals(),av=PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0;
+  el.innerHTML=[
+    ["Avance financiero",formatoPct(av),`${formatoCLP(t.neto)} ejecutado`],
+    ["Presupuesto referencial",formatoCLP(PROJECT_BUDGET),"Base de comparación"],
+    ["Saldo estimado",formatoCLP(Math.max(PROJECT_BUDGET-t.neto,0)),"Presupuesto menos ejecutado"],
+    ["Partidas con gasto",uniqueCount(gastos,"categoria"),"Categorías registradas"]
+  ].map(c=>`<div class="kpi-card"><div class="kpi-title">${c[0]}</div><div class="kpi-value">${c[1]}</div><div class="kpi-footer">${c[2]}</div></div>`).join("");
 }
 function renderControlEtapas(){
-  const el=$("control-etapas"); if(!el) return; if(!gastos.length){ el.innerHTML=emptyState("Sin avance registrado. No hay gastos para calcular etapas."); return; }
-  const groups=groupBy(gastos,g=>g.categoria||"Sin categoría"), total=sumBy(gastos,"neto");
-  el.innerHTML=Object.entries(groups).map(([cat,rows])=>{ const monto=sumBy(rows,"neto"), pct=total?(monto/total)*100:0; return `<div class="etapa-card"><div class="etapa-title">${cat}</div><div class="etapa-value">${formatoCLP(monto)}</div><div class="cat-track"><div class="cat-fill cat-fill-green" style="width:${Math.min(pct,100)}%"></div></div><div class="etapa-sub">${formatoPct(pct)} del gasto registrado</div></div>`; }).join("");
+  const el=$("control-etapas");if(!el)return;
+  if(!gastos.length){el.innerHTML=emptyState("Sin avance registrado.");return;}
+  const groups=groupBy(gastos,g=>g.categoria||"Sin categoría"),total=sumBy(gastos,"neto");
+  el.innerHTML=`<div class="etapas-cards-grid">${Object.entries(groups).map(([cat,rows])=>{
+    const monto=sumBy(rows,"neto"),pct=total?(monto/total)*100:0;
+    return`<div class="etapa-card-item">
+      <div class="etapa-card-top">
+        <span class="cat-badge ${getCategoriaClass(cat)}">${cat}</span>
+        <span class="etapa-card-pct">${formatoPct(pct)}</span>
+      </div>
+      <div class="etapa-card-monto">${formatoCLP(monto)}</div>
+      <div class="cat-track" style="margin-top:10px">
+        <div class="cat-fill" style="width:${Math.min(pct,100)}%"></div>
+      </div>
+      <div class="etapa-card-sub">${rows.length} documentos</div>
+    </div>`;
+  }).join("")}</div>`;
 }
-
-/* ── HITOS: grid 2×2 con iconos ──────────────────────────── */
 function renderControlHitos(){
-  const el=$("control-hitos"); if(!el) return;
-  if(!gastos.length){ el.innerHTML=emptyState("Sin hitos calculados. No hay gastos registrados."); return; }
+  const el=$("control-hitos");if(!el)return;
+  if(!gastos.length){el.innerHTML=emptyState("Sin hitos.");return;}
   const t=getTotals();
-  const hitos = [
-    { icon:"📄", label:"Documentación",  estado: t.pendientesOcr>0?"Pendiente":"Completo",       desc:`${t.pendientesOcr} documentos pendientes OCR`,       ok: t.pendientesOcr===0 },
-    { icon:"💰", label:"Presupuesto",    estado: t.neto>PROJECT_BUDGET?"Sobre presupuesto":"En control", desc:`${formatoCLP(t.neto)} ejecutado`,           ok: t.neto<=PROJECT_BUDGET },
-    { icon:"🏢", label:"Proveedores",    estado: t.proveedores>0?"Con actividad":"Sin actividad",  desc:`${t.proveedores} proveedores registrados`,            ok: t.proveedores>0 },
-    { icon:"📊", label:"Avance",         estado: t.neto>0?"En progreso":"Sin inicio",              desc:`${formatoPct(PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0)} del presupuesto`, ok: t.neto>0 }
+  const hitos=[
+    {icon:"📄",label:"Documentación", estado:t.pendientesOcr>0?"Pendiente":"Completo",         desc:`${t.pendientesOcr} docs pendientes OCR`,                          ok:t.pendientesOcr===0},
+    {icon:"💰",label:"Presupuesto",   estado:t.neto>PROJECT_BUDGET?"Sobre ppto":"En control",  desc:`${formatoCLP(t.neto)} ejecutado`,                                 ok:t.neto<=PROJECT_BUDGET},
+    {icon:"🏢",label:"Proveedores",   estado:t.proveedores>0?"Con actividad":"Sin actividad",   desc:`${t.proveedores} proveedores registrados`,                        ok:t.proveedores>0},
+    {icon:"📊",label:"Avance",        estado:t.neto>0?"En progreso":"Sin inicio",               desc:`${formatoPct(PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0)} del ppto`, ok:t.neto>0}
   ];
-  el.innerHTML = `<div class="hitos-2x2">${hitos.map(h=>`
+  el.innerHTML=`<div class="hitos-2x2">${hitos.map(h=>`
     <div class="hito-tile">
       <div class="hito-tile-top">
         <span class="hito-tile-icon">${h.icon}</span>
@@ -664,69 +399,159 @@ function renderControlHitos(){
       <div class="hito-tile-desc">${h.desc}</div>
     </div>`).join("")}</div>`;
 }
-
 function renderControlCat(){
-  const el=$("control-cat"); if(!el) return; if(!gastos.length){ el.innerHTML=emptyState("Sin costos por categoría."); return; }
-  const catGroups=groupBy(gastos,g=>g.categoria||"Sin categoría"), total=sumBy(gastos,"neto"), months=[...new Set(gastos.map(g=>mesLabel(g.fecha)))].sort();
-  el.innerHTML=Object.entries(catGroups).map(([cat,rows])=>{ const byMonth=groupBy(rows,r=>mesLabel(r.fecha)), catTotal=sumBy(rows,"neto"); const vals=Array.from({length:5}).map((_,i)=>`<div>${months[i]?formatoCLP(sumBy(byMonth[months[i]]||[],"neto")):"—"}</div>`).join(""); return `<div class="table-row ctrl-cat-row"><div><span class="cat-badge ${getCategoriaClass(cat)}">${cat}</span></div><div>Gasto</div>${vals}<div>${formatoCLP(catTotal)}</div><div>${formatoPct(total?(catTotal/total)*100:0)}</div></div>`; }).join("");
+  const el=$("control-cat");if(!el)return;
+  if(!gastos.length){el.innerHTML=emptyState("Sin costos.");return;}
+  const cg=groupBy(gastos,g=>g.categoria||"Sin categoría"),total=sumBy(gastos,"neto"),months=[...new Set(gastos.map(g=>mesLabel(g.fecha)))].sort();
+  el.innerHTML=Object.entries(cg).map(([cat,rows])=>{const bm=groupBy(rows,r=>mesLabel(r.fecha)),ct=sumBy(rows,"neto");const vals=Array.from({length:5}).map((_,i)=>`<div>${months[i]?formatoCLP(sumBy(bm[months[i]]||[],"neto")):"—"}</div>`).join("");return`<div class="table-row ctrl-cat-row"><div><span class="cat-badge ${getCategoriaClass(cat)}">${cat}</span></div><div>Gasto</div>${vals}<div>${formatoCLP(ct)}</div><div>${formatoPct(total?(ct/total)*100:0)}</div></div>`;}).join("");
 }
 
-function renderReportes(){ renderReportesCat(); renderReportesEtapas(); }
-function renderReportesCat(){
-  const el=$("reportes-cat"); if(!el) return; if(!gastos.length){ el.innerHTML=emptyState("Sin reporte por categoría."); return; }
-  const groups=groupBy(gastos,g=>g.categoria||"Sin categoría"), total=sumBy(gastos,"neto");
-  el.innerHTML=Object.entries(groups).map(([cat,rows])=>({cat,monto:sumBy(rows,"neto"),docs:rows.length})).sort((a,b)=>b.monto-a.monto).map(r=>`<div class="report-row"><div class="report-label">${r.cat}</div><div class="report-value">${formatoCLP(r.monto)}</div><div class="cat-track"><div class="cat-fill cat-fill-green" style="width:${Math.min(total?(r.monto/total)*100:0,100)}%"></div></div><div class="report-sub">${r.docs} docs · ${formatoPct(total?(r.monto/total)*100:0)}</div></div>`).join("");
+/* ── REPORTES ─────────────────────────────────────────────── */
+const WIDGET_DEFS = {
+  cat:         { label:"Por Categoría",         icon:"🏷️" },
+  mensual:     { label:"Mensual",               icon:"📅" },
+  proveedores: { label:"Top Proveedores",        icon:"🏢" },
+  iva:         { label:"IVA Crédito Fiscal",     icon:"💵" },
+  avance:      { label:"Avance Financiero",      icon:"📊" },
+  documentos:  { label:"Documentos por Tipo",   icon:"📄" },
+  metodo_pago: { label:"Método de Pago",         icon:"💳" },
+  mensual_iva: { label:"IVA Mensual",            icon:"🧾" },
+};
+
+function renderReportes(){
+  renderReportConfig();
+  renderReportWidgets();
 }
 
-/* ── REPORTE MENSUAL: tarjetas con barra verde ───────────── */
-function renderReportesEtapas(){
-  const el=$("reportes-etapas"); if(!el) return;
-  if(!gastos.length){ el.innerHTML=emptyState("Sin reporte mensual."); return; }
-  const groups=groupBy(gastos,g=>mesLabel(g.fecha));
-  const totalGlobal = sumBy(gastos,"neto");
-  const sorted = Object.entries(groups).sort(([a],[b])=>a.localeCompare(b));
-  el.innerHTML = `<div class="reporte-mensual-grid">${sorted.map(([mes,rows])=>{
-    const neto = sumBy(rows,"neto");
-    const iva  = sumBy(rows,"iva");
-    const pct  = totalGlobal ? (neto/totalGlobal)*100 : 0;
-    return `<div class="reporte-mes-card">
-      <div class="reporte-mes-header">
-        <span class="reporte-mes-nombre">${mes}</span>
-        <span class="reporte-mes-docs">${rows.length} doc${rows.length!==1?"s":""}</span>
-      </div>
-      <div class="reporte-mes-monto">${formatoCLP(neto)}</div>
-      <div class="cat-track" style="margin:8px 0 6px">
-        <div class="cat-fill cat-fill-green" style="width:${Math.min(pct,100)}%"></div>
-      </div>
-      <div class="reporte-mes-footer">
-        <span>IVA ${formatoCLP(iva)}</span>
-        <span>${formatoPct(pct)}</span>
-      </div>
+function renderReportConfig(){
+  const el=$("reportes-config");if(!el)return;
+  el.innerHTML=`
+    <div class="report-config-title">⚙️ Configurar widgets visibles</div>
+    <div class="report-config-chips">
+      ${Object.entries(WIDGET_DEFS).map(([k,w])=>`
+        <button class="report-chip ${activeWidgets.includes(k)?"chip-active":""}" data-widget="${k}">
+          ${w.icon} ${w.label}
+        </button>`).join("")}
     </div>`;
-  }).join("")}</div>`;
+  el.querySelectorAll(".report-chip").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const k=btn.dataset.widget;
+      if(activeWidgets.includes(k)){
+        if(activeWidgets.length<=1)return;
+        activeWidgets=activeWidgets.filter(x=>x!==k);
+      }else{ activeWidgets.push(k); }
+      localStorage.setItem(REPORT_WIDGETS_KEY,JSON.stringify(activeWidgets));
+      renderReportes();
+    });
+  });
 }
 
-function updateVisibleSections(ids=[]){ document.querySelectorAll(".module-block").forEach(s=>s.classList.add("module-hidden")); ids.forEach(id=>$(id)?.classList.remove("module-hidden")); }
+function renderReportWidgets(){
+  const el=$("reportes-widgets");if(!el)return;
+  if(!gastos.length){el.innerHTML=emptyState("Sin datos.");return;}
+  el.innerHTML=activeWidgets.map(k=>renderWidget(k)).join("");
+}
+
+function renderWidget(k){
+  const def=WIDGET_DEFS[k];if(!def)return"";
+  const t=getTotals();
+  const card=(title,sub,content)=>`
+    <div class="report-widget-card">
+      <div class="report-widget-title">${def.icon} ${title}</div>
+      <div class="report-widget-sub">${sub}</div>
+      <div class="report-widget-body">${content}</div>
+    </div>`;
+
+  if(k==="cat"){
+    const groups=groupBy(gastos,g=>g.categoria||"Sin categoría"),total=sumBy(gastos,"neto");
+    const items=Object.entries(groups).map(([cat,rows])=>({cat,monto:sumBy(rows,"neto"),docs:rows.length})).sort((a,b)=>b.monto-a.monto);
+    return card("Por Categoría","Gasto neto por categoría",`<div class="rw-etapas-grid">${items.map(r=>{const pct=total?(r.monto/total)*100:0;return`<div class="etapa-card-item"><div class="etapa-card-top"><span class="cat-badge ${getCategoriaClass(r.cat)}">${r.cat}</span><span class="etapa-card-pct">${formatoPct(pct)}</span></div><div class="etapa-card-monto">${formatoCLP(r.monto)}</div><div class="cat-track" style="margin-top:8px"><div class="cat-fill" style="width:${Math.min(pct,100)}%"></div></div><div class="etapa-card-sub">${r.docs} docs</div></div>`;}).join("")}</div>`);
+  }
+  if(k==="mensual"){
+    const groups=groupBy(gastos,g=>mesLabel(g.fecha)),totalG=sumBy(gastos,"neto");
+    const sorted=Object.entries(groups).sort(([a],[b])=>a.localeCompare(b));
+    return card("Reporte Mensual","Evolución de gastos por mes",`<div class="rw-etapas-grid">${sorted.map(([mes,rows])=>{const neto=sumBy(rows,"neto"),iva=sumBy(rows,"iva"),pct=totalG?(neto/totalG)*100:0;return`<div class="etapa-card-item"><div class="etapa-card-top"><span style="font-weight:700;color:var(--text)">${mes}</span><span class="etapa-card-pct">${formatoPct(pct)}</span></div><div class="etapa-card-monto">${formatoCLP(neto)}</div><div class="cat-track" style="margin-top:8px"><div class="cat-fill" style="width:${Math.min(pct,100)}%"></div></div><div class="etapa-card-sub">${rows.length} docs · IVA ${formatoCLP(iva)}</div></div>`;}).join("")}</div>`);
+  }
+  if(k==="proveedores"){
+    const groups=groupBy(gastos,g=>g.proveedor||"Pendiente"),totalN=sumBy(gastos,"neto");
+    const top=Object.entries(groups).map(([n,rows])=>({n,monto:sumBy(rows,"neto"),docs:rows.length})).sort((a,b)=>b.monto-a.monto).slice(0,6);
+    return card("Top Proveedores","Por monto neto registrado",`<div class="rw-etapas-grid">${top.map(p=>{const pct=totalN?(p.monto/totalN)*100:0;return`<div class="etapa-card-item"><div class="etapa-card-top"><span style="font-size:13px;font-weight:600;color:var(--text)">${p.n}</span><span class="etapa-card-pct">${formatoPct(pct)}</span></div><div class="etapa-card-monto">${formatoCLP(p.monto)}</div><div class="cat-track" style="margin-top:8px"><div class="cat-fill" style="width:${Math.min(pct,100)}%"></div></div><div class="etapa-card-sub">${p.docs} docs</div></div>`;}).join("")}</div>`);
+  }
+  if(k==="iva"){
+    const docsConIva=gastos.filter(g=>numberValue(g.iva)>0).length;
+    return card("IVA Crédito Fiscal","Resumen tributario",`<div class="rw-kpi-row"><div class="rw-kpi"><div class="rw-kpi-label">IVA Total CF</div><div class="rw-kpi-val">${formatoCLP(t.iva)}</div></div><div class="rw-kpi"><div class="rw-kpi-label">Docs con CF</div><div class="rw-kpi-val">${docsConIva}</div></div><div class="rw-kpi"><div class="rw-kpi-label">% sobre neto</div><div class="rw-kpi-val">${formatoPct(t.neto?(t.iva/t.neto)*100:0)}</div></div></div>`);
+  }
+  if(k==="avance"){
+    const av=PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0;
+    return card("Avance Financiero","Neto ejecutado vs presupuesto",`<div class="rw-avance"><div class="rw-avance-pct">${formatoPct(av)}</div><div class="cat-track rw-avance-bar"><div class="cat-fill" style="width:${Math.min(av,100)}%"></div></div><div class="rw-avance-detail"><span>${formatoCLP(t.neto)} ejecutado</span><span>de ${formatoCLP(PROJECT_BUDGET)}</span></div></div>`);
+  }
+  if(k==="documentos"){
+    const groups=groupBy(gastos,g=>g.tipo_documento||"Sin tipo");
+    const items=Object.entries(groups).map(([tipo,rows])=>({tipo,docs:rows.length,monto:sumBy(rows,"neto")})).sort((a,b)=>b.monto-a.monto);
+    return card("Por Tipo de Documento","Clasificación documental",`<div class="rw-etapas-grid">${items.map(r=>{const pct=t.neto?(r.monto/t.neto)*100:0;return`<div class="etapa-card-item"><div class="etapa-card-top"><span style="font-size:12px;font-weight:600">${r.tipo}</span><span class="etapa-card-pct">${r.docs} docs</span></div><div class="etapa-card-monto">${formatoCLP(r.monto)}</div><div class="cat-track" style="margin-top:8px"><div class="cat-fill" style="width:${Math.min(pct,100)}%"></div></div><div class="etapa-card-sub">${formatoPct(pct)} del neto</div></div>`;}).join("")}</div>`);
+  }
+  if(k==="metodo_pago"){
+    const groups=groupBy(gastos,g=>g.metodo_pago||"Sin registrar");
+    const items=Object.entries(groups).map(([mp,rows])=>({mp,docs:rows.length,monto:sumBy(rows,"neto")})).sort((a,b)=>b.monto-a.monto);
+    return card("Por Método de Pago","Distribución de pagos",`<div class="rw-etapas-grid">${items.map(r=>{const pct=t.neto?(r.monto/t.neto)*100:0;return`<div class="etapa-card-item"><div class="etapa-card-top"><span style="font-size:12px;font-weight:600">${r.mp}</span><span class="etapa-card-pct">${r.docs} docs</span></div><div class="etapa-card-monto">${formatoCLP(r.monto)}</div><div class="cat-track" style="margin-top:8px"><div class="cat-fill" style="width:${Math.min(pct,100)}%"></div></div><div class="etapa-card-sub">${formatoPct(pct)}</div></div>`;}).join("")}</div>`);
+  }
+  if(k==="mensual_iva"){
+    const groups=groupBy(gastos,g=>mesLabel(g.fecha));
+    const sorted=Object.entries(groups).sort(([a],[b])=>a.localeCompare(b));
+    let acum=0;
+    return card("IVA Mensual","Crédito fiscal acumulado por mes",`<div class="rw-etapas-grid">${sorted.map(([mes,rows])=>{const iva=sumBy(rows,"iva");acum+=iva;return`<div class="etapa-card-item"><div class="etapa-card-top"><span style="font-weight:700">${mes}</span><span class="etapa-card-pct">${formatoCLP(iva)}</span></div><div class="etapa-card-monto">${formatoCLP(acum)}</div><div class="etapa-card-sub">Acumulado</div></div>`;}).join("")}</div>`);
+  }
+  return "";
+}
+
+/* ── NAVIGATION ───────────────────────────────────────────── */
+function updateVisibleSections(ids=[]){
+  document.querySelectorAll(".module-block").forEach(s=>s.classList.add("module-hidden"));
+  ids.forEach(id=>$(id)?.classList.remove("module-hidden"));
+}
 function setupNavigation(){
-  const buttons=document.querySelectorAll(".nav-btn"), title=$("page-title"), subtitle=$("page-subtitle");
-  buttons.forEach(button=>button.addEventListener("click",()=>{ buttons.forEach(btn=>btn.classList.remove("active")); button.classList.add("active"); currentView=button.dataset.view; const view=views[currentView]||views.resumen; if(title) title.textContent=view.title; if(subtitle) subtitle.textContent=view.subtitle; updateVisibleSections(view.visible); docsVisibleLimit=(currentView==="gastos"||currentView==="documentos")?10:3; renderDocs(docsVisibleLimit); }));
+  const buttons=document.querySelectorAll(".nav-btn"),title=$("page-title"),subtitle=$("page-subtitle");
+  buttons.forEach(btn=>btn.addEventListener("click",()=>{
+    buttons.forEach(b=>b.classList.remove("active"));btn.classList.add("active");
+    currentView=btn.dataset.view;
+    const view=views[currentView]||views.resumen;
+    if(title)title.textContent=view.title;
+    if(subtitle)subtitle.textContent=view.subtitle;
+    updateVisibleSections(view.visible);
+    docsVisibleLimit=(currentView==="gastos")?10:3;
+    renderDocs(docsVisibleLimit);
+  }));
   $("btn-ver-reportes")?.addEventListener("click",()=>document.querySelector('[data-view="reportes"]')?.click());
 }
-function renderAll(){ renderKPIs(); renderAlerts(); renderBottomCards(); renderDocs(docsVisibleLimit); renderProveedores(); renderCaja(); renderBalance(); renderControlProyecto(); renderReportes(); }
-function rowsToCSV(rows){
-  const headers=["fecha","proveedor","rut","tipo_documento","numero_documento","categoria","neto","iva","total","metodo_pago","estado_ocr","foto_path"];
-  const esc = v => `"${String(v ?? "").replace(/"/g,'""')}"`;
-  return [headers.join(";"), ...rows.map(r=>headers.map(h=>esc(r[h])).join(";"))].join("\n");
+
+/* ── RENDER ALL ───────────────────────────────────────────── */
+function renderAll(){
+  renderKPIs();renderAlerts();renderBottomCards();
+  renderDocs(docsVisibleLimit);renderProveedores();
+  renderCaja();renderBalance();renderControlProyecto();
+  renderReportes();renderBudgetEditor();
 }
-function downloadText(filename,text){ const blob=new Blob([text],{type:"text/csv;charset=utf-8"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
-function exportCSV(){ downloadText("gastos_junquillar.csv", rowsToCSV(filteredDocs)); }
+
+/* ── CSV EXPORT ───────────────────────────────────────────── */
+function rowsToCSV(rows){
+  const h=["fecha","proveedor","rut","tipo_documento","numero_documento","categoria","neto","iva","total","metodo_pago","estado_ocr"];
+  const esc=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  return[h.join(";"),...rows.map(r=>h.map(f=>esc(r[f])).join(";"))].join("\n");
+}
+function downloadText(name,text){const b=new Blob([text],{type:"text/csv;charset=utf-8"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
+function exportCSV(){downloadText("gastos_junquillar.csv",rowsToCSV(filteredDocs));}
+
+/* ── SETUP ────────────────────────────────────────────────── */
 function setupButtons(){
-  $("load-more-btn")?.addEventListener("click",()=>{ docsVisibleLimit += 20; renderDocs(docsVisibleLimit); });
-  $("btn-aplicar-filtros")?.addEventListener("click",applyFilters);
-  $("btn-limpiar-filtros")?.addEventListener("click",clearFilters);
+  $("load-more-btn")?.addEventListener("click",()=>{docsVisibleLimit+=20;renderDocs(docsVisibleLimit);});
+  $("btn-aplicar-filtros-gastos")?.addEventListener("click",applyFilters);
+  $("btn-limpiar-filtros-gastos")?.addEventListener("click",clearFilters);
   $("btn-export-csv")?.addEventListener("click",exportCSV);
   $("btn-export-excel")?.addEventListener("click",exportCSV);
-  ["filter-text","filter-text-gastos","global-search"].forEach(id => $(id)?.addEventListener("input", applyFilters));
+  ["filter-text-gastos","global-search"].forEach(id=>$(id)?.addEventListener("input",applyFilters));
+  $("modal-overlay")?.addEventListener("click",closeEditModal);
+  $("btn-modal-cancel")?.addEventListener("click",closeEditModal);
+  $("btn-modal-save")?.addEventListener("click",saveEditModal);
 }
-function initDashboard(){ setupNavigation(); setupFileUpload(); setupButtons(); updateVisibleSections(views.resumen.visible); loadData(); }
-document.addEventListener("DOMContentLoaded", initDashboard);
+function initDashboard(){setupNavigation();setupFileUpload();setupButtons();updateVisibleSections(views.resumen.visible);loadData();}
+document.addEventListener("DOMContentLoaded",initDashboard);

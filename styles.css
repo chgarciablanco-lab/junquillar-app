@@ -640,3 +640,185 @@ svg { display: inline-block; vertical-align: middle; }
 @media (max-width: 600px) {
   .reporte-mensual-grid { grid-template-columns: 1fr; }
 }
+
+/* ============================================================
+   ESTILOS NUEVOS — Modal · Filtros · Reportes · Budget · Etapas
+   ============================================================ */
+
+/* ── MODAL EDITAR GASTO ──────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(15,23,42,.55);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.modal-hidden { display: none !important; }
+.modal-box {
+  background: #fff; border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(15,23,42,.2);
+  width: 100%; max-width: 640px;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.modal-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--muted); line-height: 1; padding: 4px; border-radius: 8px; }
+.modal-close:hover { background: #f1f5f9; color: var(--text); }
+.modal-body { padding: 20px 24px; overflow-y: auto; max-height: 60vh; }
+.modal-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+}
+.modal-field { display: flex; flex-direction: column; gap: 5px; }
+.modal-field-full { grid-column: 1 / -1; }
+.modal-field label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.modal-field input, .modal-field select {
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 12px; font-size: 13px; outline: none;
+  background: #f8fafc; color: var(--text);
+  transition: border-color .15s, background .15s;
+}
+.modal-field input:focus, .modal-field select:focus {
+  border-color: #059669; background: #fff;
+  box-shadow: 0 0 0 3px rgba(5,150,105,.1);
+}
+.modal-footer {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+  background: #f8fafc;
+}
+.modal-btn-cancel {
+  background: #fff; border: 1px solid var(--line); color: var(--muted);
+  border-radius: 10px; padding: 9px 18px; font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.modal-btn-cancel:hover { background: #f1f5f9; }
+.modal-btn-save {
+  background: #059669; color: #fff; border: none;
+  border-radius: 10px; padding: 9px 20px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.modal-btn-save:hover { background: #047857; }
+
+/* ── GASTOS TABLE — acciones alineadas ───────────────────── */
+.gastos-head, .gastos-row {
+  grid-template-columns: .7fr 1.5fr .85fr .5fr .9fr .85fr .75fr .85fr .3fr .8fr .55fr !important;
+}
+.doc-actions { display: flex; gap: 4px; align-items: center; }
+.action-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 14px; padding: 3px 4px;
+  border-radius: 6px; opacity: .7;
+  transition: opacity .15s, background .15s;
+  line-height: 1;
+}
+.action-btn:hover { opacity: 1; background: #f1f5f9; }
+
+/* ── PRESUPUESTO EDITABLE ────────────────────────────────── */
+.budget-edit-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
+.budget-edit-label { font-size: 14px; font-weight: 500; color: var(--text); }
+.budget-edit-controls { display: flex; gap: 10px; align-items: center; }
+.budget-input {
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 14px; font-size: 14px; width: 200px; outline: none;
+  background: #f8fafc; color: var(--text);
+}
+.budget-input:focus { border-color: #059669; background: #fff; box-shadow: 0 0 0 3px rgba(5,150,105,.1); }
+.budget-save-btn {
+  background: #059669; color: #fff; border: none;
+  border-radius: 10px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.budget-save-btn:hover { background: #047857; }
+
+/* ── ETAPAS CARDS GRID (Control + Reportes) ──────────────── */
+.etapas-cards-grid, .rw-etapas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+  padding: 16px 0 4px;
+}
+.etapa-card-item {
+  background: #f8fafc; border: 1px solid var(--line);
+  border-radius: 14px; padding: 16px 18px;
+  display: flex; flex-direction: column;
+  transition: var(--transition);
+}
+.etapa-card-item:hover { border-color: #cbd5e1; box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.etapa-card-top {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 8px; margin-bottom: 8px;
+}
+.etapa-card-pct { font-size: 12px; font-weight: 700; color: #059669; white-space: nowrap; }
+.etapa-card-monto { font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -.02em; }
+.etapa-card-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+/* ── REPORTES CONFIG ─────────────────────────────────────── */
+.report-config-title { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 12px; }
+.report-config-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.report-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: #f1f5f9; border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 14px;
+  font-size: 12px; font-weight: 500; color: var(--muted);
+  cursor: pointer; transition: var(--transition);
+}
+.report-chip:hover { background: #e2e8f0; color: var(--text); }
+.chip-active { background: var(--green-soft) !important; color: var(--green) !important; border-color: #a7f3d0 !important; font-weight: 600 !important; }
+
+/* ── REPORTES WIDGETS ────────────────────────────────────── */
+#reportes-widgets { display: flex; flex-direction: column; gap: 16px; }
+.report-widget-card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+  padding: 20px 22px;
+}
+.report-widget-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.report-widget-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.report-widget-body { margin-top: 4px; }
+
+/* KPI row en reportes */
+.rw-kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 16px 0 4px; }
+.rw-kpi { background: #f8fafc; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+.rw-kpi-label { font-size: 12px; color: var(--muted); }
+.rw-kpi-val { font-size: 22px; font-weight: 700; color: var(--text); margin-top: 6px; letter-spacing: -.02em; }
+
+/* Avance widget */
+.rw-avance { padding: 16px 0 4px; }
+.rw-avance-pct { font-size: 42px; font-weight: 700; color: #059669; letter-spacing: -.03em; line-height: 1; }
+.rw-avance-bar { margin: 12px 0 8px; height: 10px !important; }
+.rw-avance-bar .cat-fill { height: 10px !important; }
+.rw-avance-detail { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+
+/* ── HITOS 2×2 ───────────────────────────────────────────── */
+.hitos-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 16px 0 4px; }
+.hito-tile { background: #f8fafc; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; transition: var(--transition); }
+.hito-tile:hover { border-color: #cbd5e1; box-shadow: var(--shadow-sm); }
+.hito-tile-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hito-tile-icon { font-size: 22px; line-height: 1; }
+.hito-tile-label { font-size: 14px; font-weight: 600; color: var(--text); }
+.hito-tile-desc { font-size: 12px; color: var(--muted); line-height: 1.45; }
+
+/* ── BARRAS VERDES (todas) ───────────────────────────────── */
+.cat-fill, .etapa-progress-fill, .progress-fill, .prov-bar { background: #059669 !important; }
+
+/* ── SQL NOTE ────────────────────────────────────────────── */
+.sql-note { margin-top: 10px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #a7f3d0; border-radius: 10px; font-size: 12px; color: #047857; }
+
+/* ── RESPONSIVE NUEVOS ───────────────────────────────────── */
+@media (max-width: 900px) {
+  .hitos-2x2 { grid-template-columns: 1fr; }
+  .etapas-cards-grid, .rw-etapas-grid { grid-template-columns: 1fr 1fr; }
+  .rw-kpi-row { grid-template-columns: 1fr 1fr; }
+  .modal-grid { grid-template-columns: 1fr; }
+  .budget-edit-row { flex-direction: column; align-items: flex-start; }
+}
+@media (max-width: 600px) {
+  .etapas-cards-grid, .rw-etapas-grid { grid-template-columns: 1fr; }
+  .rw-kpi-row { grid-template-columns: 1fr; }
+}
