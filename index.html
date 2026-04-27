@@ -244,15 +244,157 @@
 
       <!-- ── REPORTES ── -->
       <section class="module-block module-hidden" id="section-reportes">
-        <div class="card">
-          <div class="card-title">📥 Exportar reportes</div>
-          <div class="card-sub">Elige el formato y haz clic en el reporte que quieres descargar</div>
-          <div id="reportes-export" style="margin-top:16px"></div>
+        <!-- Encabezado del Reporte Ejecutivo -->
+        <div class="report-header">
+          <div class="report-header-left">
+            <h1 class="report-title">Reporte Ejecutivo — Casa Junquillar</h1>
+            <div class="report-meta">
+              <span class="report-status"><span class="status-dot"></span>En ejecución</span>
+              <span class="report-period" id="report-period">Abril 2026</span>
+              <span class="report-updated" id="report-updated">Última actualización: --</span>
+            </div>
+          </div>
+          <div class="report-header-actions">
+            <button class="btn" id="btn-export-pdf" onclick="exportToPDF()">📄 Exportar PDF</button>
+            <button class="btn" id="btn-export-excel" onclick="exportToExcel()">📊 Exportar Excel</button>
+            <button class="btn" id="btn-ver-detalle" onclick="toggleDetalle()">👁️ Ver detalle</button>
+          </div>
         </div>
-        <div class="card" style="margin-bottom:0">
-          <div id="reportes-config"></div>
+
+        <!-- KPIs Principales -->
+        <div class="kpi-grid" id="report-kpis">
+          <div class="card kpi-card">
+            <div class="kpi-icon">💰</div>
+            <div class="kpi-content">
+              <div class="kpi-label">Presupuesto total</div>
+              <div class="kpi-value" id="kpi-presupuesto">$0</div>
+            </div>
+          </div>
+          <div class="card kpi-card">
+            <div class="kpi-icon">📊</div>
+            <div class="kpi-content">
+              <div class="kpi-label">Ejecutado neto</div>
+              <div class="kpi-value" id="kpi-ejecutado">$0</div>
+            </div>
+          </div>
+          <div class="card kpi-card">
+            <div class="kpi-icon">📈</div>
+            <div class="kpi-content">
+              <div class="kpi-label">Avance financiero</div>
+              <div class="kpi-value" id="kpi-avance">0%</div>
+              <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-avance-bar"></div></div>
+            </div>
+          </div>
+          <div class="card kpi-card">
+            <div class="kpi-icon">🧾</div>
+            <div class="kpi-content">
+              <div class="kpi-label">IVA crédito acumulado</div>
+              <div class="kpi-value" id="kpi-iva">$0</div>
+            </div>
+          </div>
         </div>
-        <div id="reportes-widgets"></div>
+
+        <!-- Diagnóstico del período -->
+        <div class="card" id="report-diagnostico">
+          <div class="card-title">📋 Diagnóstico del período</div>
+          <div class="card-sub">Resumen ejecutivo basado en los datos disponibles</div>
+          <div class="diagnostico-text" id="diagnostico-text">
+            Cargando diagnóstico...
+          </div>
+        </div>
+
+        <!-- Alertas del período -->
+        <div class="card" id="report-alertas">
+          <div class="card-title">⚠️ Alertas del período</div>
+          <div class="card-sub">Estado actual del proyecto</div>
+          <div class="alertas-list" id="alertas-list">
+            <div class="alerta-item alerta-info">Sin alertas registradas</div>
+          </div>
+        </div>
+
+        <!-- Gráficos -->
+        <div class="report-charts-grid">
+          <div class="card">
+            <div class="card-title">📊 Presupuesto vs. Ejecutado</div>
+            <div class="card-sub">Comparación visual del estado actual</div>
+            <div class="chart-container" id="chart-presupuesto">
+              <canvas id="chart-presupuesto-canvas"></canvas>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">🏷️ Distribución por categoría</div>
+            <div class="card-sub">Gasto neto por categoría</div>
+            <div class="chart-container" id="chart-categoria">
+              <canvas id="chart-categoria-canvas"></canvas>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">📅 Evolución mensual</div>
+            <div class="card-sub">Gastos por mes</div>
+            <div class="chart-container" id="chart-mensual">
+              <canvas id="chart-mensual-canvas"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resumen por Categoría -->
+        <div class="card" id="report-resumen-categoria">
+          <div class="card-title">📋 Resumen por Categoría</div>
+          <div class="card-sub">Detalle por partida presupuestaria</div>
+          <div class="table-wrap">
+            <table class="resumen-categoria-table">
+              <thead>
+                <tr>
+                  <th>Categoría</th>
+                  <th class="money">Presupuesto</th>
+                  <th class="money">Ejecutado</th>
+                  <th class="money">Diferencia</th>
+                  <th class="money">% Avance</th>
+                </tr>
+              </thead>
+              <tbody id="resumen-categoria-body">
+                <tr><td colspan="5" class="empty-cell">Sin datos disponibles</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Resumen Tributario -->
+        <div class="card" id="report-tributario">
+          <div class="card-title">🧾 Resumen Tributario</div>
+          <div class="card-sub">Estado de documentación tributaria</div>
+          <div class="tributario-grid">
+            <div class="tributario-item">
+              <div class="tributario-label">Base neta acumulada</div>
+              <div class="tributario-value" id="trib-base-neta">$0</div>
+            </div>
+            <div class="tributario-item">
+              <div class="tributario-label">IVA crédito fiscal</div>
+              <div class="tributario-value" id="trib-iva-cf">$0</div>
+            </div>
+            <div class="tributario-item">
+              <div class="tributario-label">Documentos con CF</div>
+              <div class="tributario-value" id="trib-docs-cf">0</div>
+            </div>
+            <div class="tributario-item">
+              <div class="tributario-label">Documentos sin CF</div>
+              <div class="tributario-value" id="trib-docs-sin-cf">0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Exportación y Configuración (oculto por defecto) -->
+        <div class="report-extras" id="report-extras" style="display:none">
+          <div class="card">
+            <div class="card-title">📥 Exportar reportes</div>
+            <div class="card-sub">Elige el formato y haz clic en el reporte que quieres descargar</div>
+            <div id="reportes-export" style="margin-top:16px"></div>
+          </div>
+          <div class="card" style="margin-bottom:0">
+            <div id="reportes-config"></div>
+          </div>
+          <div id="reportes-widgets"></div>
+        </div>
       </section>
 
       <!-- ── VENTAS ── -->
