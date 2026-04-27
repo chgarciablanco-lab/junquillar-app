@@ -1,64 +1,74 @@
 /* ============================================================
-   JUNQO – FIX REPORTES / BALANCE
+   JUNQO — Fix definitivo Reportes + Balance
    ------------------------------------------------------------
-   Objetivo:
-   - Mantener el diseño visual actual.
-   - No tocar la lógica base de app.js.
-   - Hacer funcionar los botones nuevos de Reportes:
-     exportToPDF(), exportToExcel() y toggleDetalle().
-   - Hacer que la descarga de Balance use el Balance real visible
-     en #balance-table, no una tabla simple genérica.
+   Cargar DESPUÉS de app.js:
+   <script src="reportes-balance-fix.js"></script>
+
+   Qué corrige:
+   1) Define exportToPDF(), exportToExcel() y toggleDetalle().
+   2) Actualiza la vista ejecutiva de Reportes con datos reales.
+   3) Exporta el Balance real desde #balance-table, no una tabla simple.
+   4) No modifica diseño, sidebar, etiquetas ni estilos base.
    ============================================================ */
+
 (function () {
   "use strict";
 
-  const BALANCE_TABLE_ID = "balance-table";
-  const REPORT_SECTION_ID = "section-reportes";
-  const REPORT_EXTRAS_ID = "report-extras";
-  const REPORT_EXPORT_ID = "reportes-export";
+  const CATEGORIAS = ["Materiales", "Mano de obra", "Servicios", "Herramientas", "Transporte"];
 
   function $(id) {
     return document.getElementById(id);
   }
 
-  function cleanText(value) {
-    return String(value ?? "")
+  function texto(el) {
+    return String(el?.innerText || el?.textContent || "")
       .replace(/\u00a0/g, " ")
       .replace(/\s+/g, " ")
       .trim();
   }
 
-  function toNumber(value) {
-    if (value === null || value === undefined || value === "") return 0;
-    const parsed = Number(String(value).replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]/g, ""));
-    return Number.isFinite(parsed) ? parsed : 0;
+  function safeGlobal(name, fallback) {
+    try {
+      // Permite leer variables globales declaradas con let/const en app.js
+      // sin exigir que estén colgadas en window.
+      const value = window.eval(name);
+      return value === undefined ? fallback : value;
+    } catch (e) {
+      return fallback;
+    }
   }
 
-  function formatCLP(value) {
+  function num(v) {
+    if (typeof window.numberValue === "function") return window.numberValue(v);
+    if (v === null || v === undefined || v === "") return 0;
+    const n = Number(String(v).replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function clp(v) {
     try {
-      if (typeof formatoCLP === "function") return formatoCLP(value);
+      const f = safeGlobal("formatoCLP", null);
+      if (typeof f === "function") return f(v);
     } catch (_) {}
-    return toNumber(value).toLocaleString("es-CL", {
+    return num(v).toLocaleString("es-CL", {
       style: "currency",
       currency: "CLP",
-      maximumFractionDigits: 0,
+      maximumFractionDigits: 0
     });
   }
 
-  function formatPct(value) {
-    try {
-      if (typeof formatoPct === "function") return formatoPct(value);
-    } catch (_) {}
-    return `${Number(value || 0).toLocaleString("es-CL", { maximumFractionDigits: 1 })}%`;
+  function pct(v) {
+    const n = Number(v || 0);
+    return `${n.toLocaleString("es-CL", { maximumFractionDigits: 1 })}%`;
   }
 
   function csvEscape(value) {
-    const text = cleanText(value);
-    return `"${text.replace(/"/g, '""')}"`;
+    const v = String(value ?? "").replace(/\r?\n/g, " ").trim();
+    return `"${v.replace(/"/g, '""')}"`;
   }
 
-  function downloadBlob(filename, content, mimeType) {
-    const blob = new Blob([content], { type: mimeType });
+  function downloadBlob(filename, content, mime) {
+    const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -69,370 +79,489 @@
     URL.revokeObjectURL(url);
   }
 
-  function todayStamp() {
-    return new Date().toISOString().slice(0, 10);
+  function getGastos() {
+    const g = safeGlobal("gastos", []);
+    return Array.isArray(g) ? g : [];
   }
 
-  function safeGetTotals() {
-    try {
-      if (typeof getTotals === "function") return getTotals();
-    } catch (_) {}
+  function getBudget() {
+    return num(safeGlobal("PROJECT_BUDGET", 0));
+  }
 
-    try {
-      if (Array.isArray(gastos)) {
-        const neto = gastos.reduce((acc, g) => acc + toNumber(g.neto), 0);
-        const iva = gastos.reduce((acc, g) => acc + toNumber(g.iva), 0);
-        const total = gastos.reduce((acc, g) => acc + toNumber(g.total), 0);
-        const docs = gastos.length;
-        return { neto, iva, total, docs };
+  function getTotalsLocal(rows = getGastos()) {
+    return {
+      neto: rows.reduce((a, r) => a + num(r.neto), 0),
+      iva: rows.reduce((a, r) => a + num(r.iva), 0),
+      total: rows.reduce((a, r) => a + num(r.total), 0),
+      docs: rows.length,
+      docsConCF: rows.filter(r => num(r.iva) > 0).length,
+      docsSinCF: rows.filter(r => num(r.iva) <= 0).length
+    };
+  }
+
+  function mesLabelLocal(fecha) {
+    if (!fecha) return "Sin fecha";
+    const s = String(fecha).slice(0, 10);
+    const match = s.match(/^(\d{4})-(\d{2})/);
+    if (!match) return "Sin fecha";
+    const meses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    return `${meses[Number(match[2]) - 1] || match[2]} ${match[1]}`;
+  }
+
+  function groupBy(rows, fn) {
+    return rows.reduce((acc, row) => {
+      const key = fn(row) || "Sin clasificar";
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(row);
+      return acc;
+    }, {});
+  }
+
+  function setText(id, value) {
+    const el = $(id);
+    if (el) el.textContent = value;
+  }
+
+  function getCategoriaBudget(cat, presupuestoTotal) {
+    const map = {
+      "Materiales": 0.42,
+      "Mano de obra": 0.32,
+      "Servicios": 0.10,
+      "Herramientas": 0.08,
+      "Transporte": 0.08
+    };
+    return presupuestoTotal * (map[cat] || 0);
+  }
+
+  function actualizarVistaReportes() {
+    const rows = getGastos();
+    const budget = getBudget();
+    const totals = getTotalsLocal(rows);
+    const avance = budget ? (totals.neto / budget) * 100 : 0;
+
+    // KPIs principales
+    setText("kpi-presupuesto", clp(budget));
+    setText("kpi-ejecutado", clp(totals.neto));
+    setText("kpi-avance", pct(avance));
+    setText("kpi-iva", clp(totals.iva));
+
+    const bar = $("kpi-avance-bar");
+    if (bar) bar.style.width = `${Math.min(Math.max(avance, 0), 100)}%`;
+
+    const updated = $("report-updated");
+    if (updated) updated.textContent = `Última actualización: ${new Date().toLocaleString("es-CL")}`;
+
+    const period = $("report-period");
+    if (period && !period.textContent.trim()) {
+      period.textContent = new Date().toLocaleDateString("es-CL", { month: "long", year: "numeric" });
+    }
+
+    // Diagnóstico
+    const diag = $("diagnostico-text");
+    if (diag) {
+      const topCat = getTopCategoria(rows);
+      const estado = avance >= 100
+        ? "El proyecto presenta ejecución completa o sobre el presupuesto referencial."
+        : avance >= 75
+          ? "El proyecto presenta un avance financiero alto y requiere control fino de desviaciones."
+          : avance > 0
+            ? "El proyecto mantiene un avance financiero controlado según los datos disponibles."
+            : "El proyecto aún no registra ejecución financiera suficiente para un diagnóstico completo.";
+
+      diag.textContent = `${estado} La mayor concentración de gasto está en ${topCat || "las categorías registradas"}. El IVA crédito fiscal acumulado asciende a ${clp(totals.iva)} y debe mantenerse separado para revisión tributaria.`;
+    }
+
+    // Alertas
+    const alertas = $("alertas-list");
+    if (alertas) {
+      const items = [];
+      if (!rows.length) {
+        items.push(["info", "Sin datos suficientes para generar alertas."]);
+      } else {
+        if (avance > 100) items.push(["warn", "El ejecutado neto supera el presupuesto referencial."]);
+        else items.push(["ok", "Sin sobrecostos críticos contra el presupuesto total."]);
+
+        const desviadas = getCategoriasDesviadas(rows, budget);
+        if (desviadas.length) items.push(["warn", `${desviadas.length} partida(s) con desviación moderada.`]);
+        else items.push(["ok", "Partidas dentro del rango esperado."]);
+
+        if (totals.docsSinCF > 0) items.push(["info", `${totals.docsSinCF} documento(s) sin crédito fiscal registrado.`]);
+        else items.push(["ok", "Documentación tributaria con crédito fiscal al día."]);
       }
-    } catch (_) {}
 
-    return { neto: 0, iva: 0, total: 0, docs: 0 };
+      alertas.innerHTML = items.map(([type, label]) => {
+        const cls = type === "warn" ? "alerta-warning" : type === "ok" ? "alerta-success" : "alerta-info";
+        const icon = type === "warn" ? "⚠️" : type === "ok" ? "✅" : "ℹ️";
+        return `<div class="alerta-item ${cls}">${icon} ${label}</div>`;
+      }).join("");
+    }
+
+    // Tabla Resumen por Categoría
+    renderResumenCategoria(rows, budget);
+
+    // Resumen tributario
+    setText("trib-base-neta", clp(totals.neto));
+    setText("trib-iva-cf", clp(totals.iva));
+    setText("trib-docs-cf", String(totals.docsConCF));
+    setText("trib-docs-sin-cf", String(totals.docsSinCF));
+
+    // Gráficos livianos sin librería externa, para que no falle si Chart.js no existe
+    renderGraficosSimples(rows, budget);
   }
 
-  function safeBudget() {
-    try {
-      if (typeof PROJECT_BUDGET !== "undefined") return toNumber(PROJECT_BUDGET);
-    } catch (_) {}
-    return 0;
+  function getTopCategoria(rows) {
+    const groups = groupBy(rows, r => r.categoria || "Sin categoría");
+    const top = Object.entries(groups)
+      .map(([cat, rs]) => [cat, rs.reduce((a, r) => a + num(r.neto), 0)])
+      .sort((a, b) => b[1] - a[1])[0];
+    return top?.[0] || "";
   }
 
-  function readVisibleReportSummary() {
-    const rows = [];
-    const add = (label, value) => rows.push([label, cleanText(value)]);
-
-    add("Reporte", "Reporte Ejecutivo — Casa Junquillar");
-    add("Fecha exportación", new Date().toLocaleString("es-CL"));
-    add("Período", $("report-period")?.innerText || "");
-    add("Estado", "En ejecución");
-    add("Última actualización", $("report-updated")?.innerText || "");
-    add("Presupuesto total", $("kpi-presupuesto")?.innerText || "");
-    add("Ejecutado neto", $("kpi-ejecutado")?.innerText || "");
-    add("Avance financiero", $("kpi-avance")?.innerText || "");
-    add("IVA crédito acumulado", $("kpi-iva")?.innerText || "");
-    add("Base neta acumulada", $("trib-base-neta")?.innerText || "");
-    add("IVA crédito fiscal", $("trib-iva-cf")?.innerText || "");
-    add("Documentos con CF", $("trib-docs-cf")?.innerText || "");
-    add("Documentos sin CF", $("trib-docs-sin-cf")?.innerText || "");
-
-    return rows;
-  }
-
-  function extractHtmlTableRows(tableSelector) {
-    const table = document.querySelector(tableSelector);
-    if (!table) return [];
-
-    const rows = [];
-    table.querySelectorAll("tr").forEach((tr) => {
-      const cells = Array.from(tr.querySelectorAll("th,td")).map((cell) => cleanText(cell.innerText || cell.textContent));
-      if (cells.some(Boolean)) rows.push(cells);
+  function getCategoriasDesviadas(rows, budget) {
+    if (!budget) return [];
+    const groups = groupBy(rows, r => r.categoria || "Sin categoría");
+    return CATEGORIAS.filter(cat => {
+      const ejecutado = (groups[cat] || []).reduce((a, r) => a + num(r.neto), 0);
+      const pptoCat = getCategoriaBudget(cat, budget);
+      return pptoCat > 0 && ejecutado / pptoCat > 0.9;
     });
-    return rows;
   }
 
-  function extractDivTableRows(containerId) {
-    const container = $(containerId);
-    if (!container) return [];
+  function renderResumenCategoria(rows, budget) {
+    const body = $("resumen-categoria-body");
+    if (!body) return;
 
-    const selectors = [
-      ".balance-head",
-      ".balance-row",
-      ".balance-sec",
-      ".balance-total",
-      ".table-head",
-      ".table-row",
-      "tr",
-    ].join(",");
+    const groups = groupBy(rows, r => r.categoria || "Sin categoría");
+    const cats = CATEGORIAS.slice();
+
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="5" class="empty-cell">Sin datos disponibles</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = cats.map(cat => {
+      const ejecutado = (groups[cat] || []).reduce((a, r) => a + num(r.neto), 0);
+      const ppto = getCategoriaBudget(cat, budget);
+      const dif = ppto - ejecutado;
+      const av = ppto ? (ejecutado / ppto) * 100 : 0;
+      const difClass = dif < 0 ? "desv-neg" : "desv-pos";
+      return `
+        <tr>
+          <td>${cat}</td>
+          <td class="money">${clp(ppto)}</td>
+          <td class="money">${clp(ejecutado)}</td>
+          <td class="money ${difClass}">${clp(dif)}</td>
+          <td class="money">${pct(av)}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  function renderGraficosSimples(rows, budget) {
+    renderBarChart("chart-presupuesto", rows, budget);
+    renderDonutLegend("chart-categoria", rows);
+    renderLineSimple("chart-mensual", rows);
+  }
+
+  function renderBarChart(id, rows, budget) {
+    const el = $(id);
+    if (!el) return;
+    const groups = groupBy(rows, r => r.categoria || "Sin categoría");
+    const max = Math.max(
+      ...CATEGORIAS.map(cat => getCategoriaBudget(cat, budget)),
+      ...CATEGORIAS.map(cat => (groups[cat] || []).reduce((a, r) => a + num(r.neto), 0)),
+      1
+    );
+
+    el.innerHTML = `
+      <div class="simple-chart-bars">
+        ${CATEGORIAS.map(cat => {
+          const ppto = getCategoriaBudget(cat, budget);
+          const eje = (groups[cat] || []).reduce((a, r) => a + num(r.neto), 0);
+          return `
+            <div class="simple-bar-group">
+              <div class="simple-bars">
+                <span class="simple-bar simple-bar-budget" style="height:${Math.max((ppto / max) * 100, 2)}%"></span>
+                <span class="simple-bar simple-bar-real" style="height:${Math.max((eje / max) * 100, 2)}%"></span>
+              </div>
+              <div class="simple-bar-label">${cat}</div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+      <div class="simple-legend"><span>Presupuesto</span><span>Ejecutado</span></div>
+    `;
+  }
+
+  function renderDonutLegend(id, rows) {
+    const el = $(id);
+    if (!el) return;
+    const groups = groupBy(rows, r => r.categoria || "Sin categoría");
+    const total = rows.reduce((a, r) => a + num(r.neto), 0);
+    const items = CATEGORIAS.map(cat => {
+      const monto = (groups[cat] || []).reduce((a, r) => a + num(r.neto), 0);
+      return { cat, monto, percent: total ? (monto / total) * 100 : 0 };
+    }).filter(i => i.monto > 0);
+
+    if (!items.length) {
+      el.innerHTML = `<div class="empty-state">Sin datos para graficar.</div>`;
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="simple-donut">
+        <div class="simple-donut-center">${clp(total)}</div>
+      </div>
+      <div class="simple-donut-list">
+        ${items.map(i => `<div><span>${i.cat}</span><strong>${pct(i.percent)}</strong></div>`).join("")}
+      </div>
+    `;
+  }
+
+  function renderLineSimple(id, rows) {
+    const el = $(id);
+    if (!el) return;
+    const groups = groupBy(rows, r => mesLabelLocal(r.fecha));
+    const items = Object.entries(groups)
+      .map(([mes, rs]) => ({ mes, monto: rs.reduce((a, r) => a + num(r.neto), 0) }))
+      .sort((a, b) => a.mes.localeCompare(b.mes))
+      .slice(-6);
+
+    if (!items.length) {
+      el.innerHTML = `<div class="empty-state">Sin datos para graficar.</div>`;
+      return;
+    }
+
+    const max = Math.max(...items.map(i => i.monto), 1);
+    el.innerHTML = `
+      <div class="simple-line-chart">
+        ${items.map(i => `
+          <div class="simple-line-point">
+            <div class="simple-line-value" style="height:${Math.max((i.monto / max) * 100, 6)}%"></div>
+            <span>${i.mes}</span>
+            <strong>${clp(i.monto)}</strong>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function extraerBalanceReal() {
+    const el = $("balance-table");
+    if (!el) return [];
 
     const rows = [];
-    container.querySelectorAll(selectors).forEach((row) => {
-      if (row.matches("tr")) {
-        const cells = Array.from(row.querySelectorAll("th,td")).map((cell) => cleanText(cell.innerText || cell.textContent));
-        if (cells.some(Boolean)) rows.push(cells);
-        return;
-      }
+    const gridRows = el.querySelectorAll(".table-head, .table-row, tr");
 
-      const directChildren = Array.from(row.children);
-      const cells = directChildren.length
-        ? directChildren.map((child) => cleanText(child.innerText || child.textContent)).filter(Boolean)
-        : [cleanText(row.innerText || row.textContent)].filter(Boolean);
-
+    gridRows.forEach(row => {
+      const cells = Array.from(row.querySelectorAll("div, th, td"))
+        .map(texto)
+        .filter(Boolean);
       if (cells.length) rows.push(cells);
     });
 
     if (rows.length) return rows;
 
-    const fallbackText = cleanText(container.innerText || container.textContent);
-    if (!fallbackText) return [];
-    return fallbackText
-      .split(/(?=MOVIMIENTOS|SALDOS|BALANCE|RESULTADOS|ACTIVOS|PASIVOS|TOTAL|Terreno|Obra en Curso|IVA Crédito|Cuenta por pagar|Gastos por pagar|Capital pendiente|Ajuste)/g)
-      .map(cleanText)
-      .filter(Boolean)
-      .map((line) => [line]);
-  }
+    const raw = (el.innerText || el.textContent || "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+    if (raw.length) return raw.map(x => [x]);
 
-  function getBalanceRowsFromDOM() {
-    const rows = extractDivTableRows(BALANCE_TABLE_ID);
-    if (rows.length) return rows;
-
-    return [
-      ["Balance General — Proyecto Casa Junquillar"],
-      ["Sin datos visibles en el módulo Balance"],
-    ];
-  }
-
-  function getBalanceRowsCalculated() {
-    const totals = safeGetTotals();
-    const terreno = 100000000;
-    const aporteSocio = 60000000;
-
-    const activoTerreno = terreno;
-    const activoObra = totals.neto;
-    const activoIva = totals.iva;
-    const totalActivo = activoTerreno + activoObra + activoIva;
-
-    const pasivoSocio = aporteSocio;
-    const pasivoGastos = totals.total;
-    const totalPasivo = pasivoSocio + pasivoGastos;
-    const diferencia = totalActivo - totalPasivo;
-
-    const rows = [
-      ["Balance General — Proyecto Casa Junquillar"],
-      ["Fecha exportación", new Date().toLocaleString("es-CL")],
-      [],
-      ["N°", "Cuenta", "Debe", "Haber", "Deudor", "Acreedor", "Activo", "Pasivo", "Pérdida", "Ganancia"],
-      ["ACTIVOS"],
-      ["1", "Terreno", formatCLP(activoTerreno), formatCLP(0), formatCLP(activoTerreno), formatCLP(0), formatCLP(activoTerreno), formatCLP(0), formatCLP(0), formatCLP(0)],
-      ["2", "Obra en Curso", formatCLP(activoObra), formatCLP(0), formatCLP(activoObra), formatCLP(0), formatCLP(activoObra), formatCLP(0), formatCLP(0), formatCLP(0)],
-      ["3", "IVA Crédito Fiscal", formatCLP(activoIva), formatCLP(0), formatCLP(activoIva), formatCLP(0), formatCLP(activoIva), formatCLP(0), formatCLP(0), formatCLP(0)],
-      ["PASIVOS"],
-      ["4", "Cuenta por pagar al Socio", formatCLP(0), formatCLP(pasivoSocio), formatCLP(0), formatCLP(pasivoSocio), formatCLP(0), formatCLP(pasivoSocio), formatCLP(0), formatCLP(0)],
-      ["5", "Gastos por pagar", formatCLP(0), formatCLP(pasivoGastos), formatCLP(0), formatCLP(pasivoGastos), formatCLP(0), formatCLP(pasivoGastos), formatCLP(0), formatCLP(0)],
-    ];
-
-    if (diferencia !== 0) {
-      rows.push([
-        "6",
-        diferencia > 0 ? "Capital pendiente" : "Ajuste",
-        diferencia > 0 ? formatCLP(diferencia) : formatCLP(0),
-        diferencia < 0 ? formatCLP(Math.abs(diferencia)) : formatCLP(0),
-        diferencia > 0 ? formatCLP(diferencia) : formatCLP(0),
-        diferencia < 0 ? formatCLP(Math.abs(diferencia)) : formatCLP(0),
-        formatCLP(0),
-        formatCLP(0),
-        diferencia < 0 ? formatCLP(Math.abs(diferencia)) : formatCLP(0),
-        diferencia > 0 ? formatCLP(diferencia) : formatCLP(0),
-      ]);
-    }
-
-    rows.push([
-      "TOTAL",
-      "",
-      formatCLP(totalActivo),
-      formatCLP(totalPasivo + (diferencia > 0 ? diferencia : 0)),
-      formatCLP(totalActivo),
-      formatCLP(totalPasivo + (diferencia > 0 ? diferencia : 0)),
-      formatCLP(totalActivo),
-      formatCLP(totalPasivo),
-      formatCLP(0),
-      formatCLP(0),
-    ]);
-
-    return rows;
-  }
-
-  function getBestBalanceRows() {
-    const domRows = getBalanceRowsFromDOM();
-    const hasRealDomRows = domRows.length > 2 && domRows.some((row) => row.join(" ").includes("Terreno") || row.join(" ").includes("Obra en Curso"));
-    return hasRealDomRows ? domRows : getBalanceRowsCalculated();
+    return [];
   }
 
   function rowsToCSV(rows) {
-    return rows.map((row) => row.map(csvEscape).join(";")).join("\n");
+    return rows.map(row => row.map(csvEscape).join(";")).join("\n");
   }
 
-  function exportBalanceCSV() {
-    const rows = getBestBalanceRows();
-    const csv = rowsToCSV(rows);
-    downloadBlob(`balance-general-casa-junquillar-${todayStamp()}.csv`, csv, "text/csv;charset=utf-8");
+  function getReporteEjecutivoRows() {
+    const rows = getGastos();
+    const budget = getBudget();
+    const totals = getTotalsLocal(rows);
+    const avance = budget ? (totals.neto / budget) * 100 : 0;
+
+    return [
+      ["Reporte Ejecutivo — Casa Junquillar"],
+      ["Fecha de exportación", new Date().toLocaleString("es-CL")],
+      [],
+      ["Indicador", "Valor"],
+      ["Presupuesto total", clp(budget)],
+      ["Ejecutado neto", clp(totals.neto)],
+      ["Avance financiero", pct(avance)],
+      ["IVA crédito acumulado", clp(totals.iva)],
+      ["Documentos con CF", totals.docsConCF],
+      ["Documentos sin CF", totals.docsSinCF],
+      [],
+      ["Categoría", "Presupuesto", "Ejecutado", "Diferencia", "% Avance"],
+      ...CATEGORIAS.map(cat => {
+        const groups = groupBy(rows, r => r.categoria || "Sin categoría");
+        const ejecutado = (groups[cat] || []).reduce((a, r) => a + num(r.neto), 0);
+        const ppto = getCategoriaBudget(cat, budget);
+        return [cat, clp(ppto), clp(ejecutado), clp(ppto - ejecutado), pct(ppto ? (ejecutado / ppto) * 100 : 0)];
+      })
+    ];
   }
 
-  function exportWorkbook() {
-    const resumenRows = readVisibleReportSummary();
-    const categoriaRows = extractHtmlTableRows(".resumen-categoria-table");
-    const balanceRows = getBestBalanceRows();
+  function exportarBalanceCSV() {
+    const balance = extraerBalanceReal();
+    const header = [
+      ["Balance General — Proyecto Casa Junquillar"],
+      ["Fuente", "Módulo Balance"],
+      ["Fecha de exportación", new Date().toLocaleString("es-CL")],
+      []
+    ];
+    const rows = balance.length ? header.concat(balance) : header.concat([["Sin datos visibles en Balance"]]);
+    downloadBlob(`balance-general-casa-junquillar-${new Date().toISOString().slice(0,10)}.csv`, rowsToCSV(rows), "text/csv;charset=utf-8");
+  }
+
+  function exportarExcelCompleto() {
+    actualizarVistaReportes();
+
+    const reporteRows = getReporteEjecutivoRows();
+    const balanceRows = extraerBalanceReal();
 
     if (window.XLSX) {
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumenRows), "Resumen Ejecutivo");
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(categoriaRows.length ? categoriaRows : [["Sin datos por categoría"]]), "Resumen Categoría");
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(balanceRows), "Balance");
-      XLSX.writeFile(wb, `reporte-ejecutivo-junquillar-${todayStamp()}.xlsx`);
+      const wb = window.XLSX.utils.book_new();
+
+      const wsReporte = window.XLSX.utils.aoa_to_sheet(reporteRows);
+      window.XLSX.utils.book_append_sheet(wb, wsReporte, "Reporte Ejecutivo");
+
+      const wsBalance = window.XLSX.utils.aoa_to_sheet(
+        balanceRows.length
+          ? [["Balance General — Proyecto Casa Junquillar"], ["Fuente", "Módulo Balance"], [], ...balanceRows]
+          : [["Balance General — Proyecto Casa Junquillar"], ["Sin datos visibles en Balance"]]
+      );
+      window.XLSX.utils.book_append_sheet(wb, wsBalance, "Balance");
+
+      window.XLSX.writeFile(wb, `reporte-ejecutivo-junquillar-${new Date().toISOString().slice(0,10)}.xlsx`);
       return;
     }
 
-    const csv = [
-      ...resumenRows,
-      [],
-      ["Resumen por Categoría"],
-      ...(categoriaRows.length ? categoriaRows : [["Sin datos por categoría"]]),
-      [],
-      ["Balance"],
-      ...balanceRows,
-    ];
-
-    downloadBlob(`reporte-ejecutivo-junquillar-${todayStamp()}.csv`, rowsToCSV(csv), "text/csv;charset=utf-8");
+    // Fallback CSV si XLSX no carga
+    const csv = rowsToCSV(reporteRows.concat([[], ["BALANCE"], ...balanceRows]));
+    downloadBlob(`reporte-ejecutivo-junquillar-${new Date().toISOString().slice(0,10)}.csv`, csv, "text/csv;charset=utf-8");
   }
 
-  function exportReportPDF() {
-    const report = $(REPORT_SECTION_ID);
-    if (!report) return;
+  function exportarPDF() {
+    actualizarVistaReportes();
 
-    const printable = report.cloneNode(true);
-    const extras = printable.querySelector(`#${REPORT_EXTRAS_ID}`);
-    if (extras) extras.style.display = "none";
-
-    const balanceRows = getBestBalanceRows();
-    const balanceHtml = `
-      <section class="print-balance">
-        <h2>Balance General — Proyecto Casa Junquillar</h2>
-        <table>
-          <tbody>
-            ${balanceRows.map((row) => `<tr>${row.map((cell) => `<td>${cleanText(cell)}</td>`).join("")}</tr>`).join("")}
-          </tbody>
-        </table>
-      </section>`;
-
-    const win = window.open("", "_blank");
-    if (!win) {
-      alert("El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para exportar PDF.");
-      return;
-    }
-
-    win.document.write(`<!doctype html>
+    const report = $("section-reportes");
+    const balance = $("section-balance");
+    const html = `
+      <!doctype html>
       <html lang="es">
       <head>
         <meta charset="utf-8">
         <title>Reporte Ejecutivo — Casa Junquillar</title>
+        <link rel="stylesheet" href="styles.css">
         <style>
-          body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a;margin:28px;background:#fff;}
-          h1,h2,h3{margin:0 0 10px;}
-          .card,.kpi-card{border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin:12px 0;break-inside:avoid;}
-          .kpi-grid,.report-charts-grid,.tributario-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
-          .report-header-actions,.report-extras,canvas,.chart-container{display:none!important;}
-          table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px;}
-          th,td{border:1px solid #e2e8f0;padding:7px;text-align:left;vertical-align:top;}
-          th{background:#f8fafc;}
-          .money{text-align:right;}
-          @media print{body{margin:18mm;} .card{box-shadow:none;} }
+          body{background:#fff;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
+          .layout,.main,.content{display:block;padding:0;margin:0;}
+          .module-hidden{display:block!important;}
+          .sidebar,.header,.report-header-actions,.bell-btn,.search-wrap{display:none!important;}
+          .card{break-inside:avoid;margin-bottom:16px;}
+          @media print{body{padding:0}.card{box-shadow:none}}
         </style>
       </head>
       <body>
-        ${printable.innerHTML}
-        ${balanceHtml}
+        ${report ? report.outerHTML : "<h1>Reporte Ejecutivo — Casa Junquillar</h1>"}
+        <hr style="margin:24px 0">
+        ${balance ? balance.outerHTML : ""}
+        <script>window.print();<\/script>
       </body>
-      </html>`);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 300);
+      </html>
+    `;
+
+    const w = window.open("", "_blank");
+    if (!w) {
+      alert("El navegador bloqueó la ventana emergente. Permite pop-ups para exportar PDF.");
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
   }
 
-  function toggleReportDetail() {
-    const extras = $(REPORT_EXTRAS_ID);
-    const btn = $("btn-ver-detalle");
+  function toggleDetalle() {
+    const extras = $("report-extras");
     if (!extras) return;
+    const hidden = extras.style.display === "none" || getComputedStyle(extras).display === "none";
+    extras.style.display = hidden ? "block" : "none";
 
-    const isHidden = extras.style.display === "none" || getComputedStyle(extras).display === "none";
-    extras.style.display = isHidden ? "block" : "none";
-    if (btn) btn.innerHTML = isHidden ? "👁️ Ocultar detalle" : "👁️ Ver detalle";
+    const btn = $("btn-ver-detalle");
+    if (btn) btn.textContent = hidden ? "👁️ Ocultar detalle" : "👁️ Ver detalle";
+
+    if (hidden) agregarBotonesBalanceDetalle();
   }
 
-  function insertBalanceExportButtons() {
-    const exportBox = $(REPORT_EXPORT_ID);
-    if (!exportBox || exportBox.dataset.balanceFixReady === "1") return;
-    exportBox.dataset.balanceFixReady = "1";
+  function agregarBotonesBalanceDetalle() {
+    const cont = $("reportes-export");
+    if (!cont || $("btn-balance-real-excel")) return;
 
-    exportBox.insertAdjacentHTML(
-      "afterbegin",
-      `<div class="export-btns" style="flex-wrap:wrap;gap:8px">
-        <button class="export-btn export-btn-xl" id="btn-export-balance-xlsx" type="button">⬇ Balance Excel</button>
-        <button class="export-btn" id="btn-export-balance-csv" type="button">⬇ Balance CSV</button>
-      </div>`
-    );
+    const wrap = document.createElement("div");
+    wrap.className = "export-btns";
+    wrap.style.marginTop = "12px";
+    wrap.innerHTML = `
+      <button class="export-btn export-btn-xl" id="btn-balance-real-excel" type="button">⬇ Balance Excel</button>
+      <button class="export-btn" id="btn-balance-real-csv" type="button">⬇ Balance CSV</button>
+    `;
+    cont.prepend(wrap);
 
-    $("btn-export-balance-xlsx")?.addEventListener("click", exportWorkbook);
-    $("btn-export-balance-csv")?.addEventListener("click", exportBalanceCSV);
+    $("btn-balance-real-excel")?.addEventListener("click", exportarExcelCompleto);
+    $("btn-balance-real-csv")?.addEventListener("click", exportarBalanceCSV);
   }
 
-  function interceptOldBalanceButtons() {
-    const reportes = $(REPORT_SECTION_ID);
-    if (!reportes) return;
+  function conectarBotones() {
+    const pdfBtn = $("btn-export-pdf");
+    const excelBtn = $("btn-export-excel");
+    const detalleBtn = $("btn-ver-detalle");
 
-    reportes.querySelectorAll("button,a").forEach((btn) => {
-      const text = cleanText(btn.innerText || btn.textContent).toLowerCase();
-      const id = String(btn.id || "").toLowerCase();
-      const data = String(btn.dataset?.report || btn.dataset?.export || "").toLowerCase();
-      const isBalance = text.includes("balance") || id.includes("balance") || data.includes("balance");
-      if (!isBalance || btn.dataset.balanceFixApplied === "1") return;
-
-      btn.dataset.balanceFixApplied = "1";
-      btn.addEventListener(
-        "click",
-        function (ev) {
-          ev.preventDefault();
-          ev.stopPropagation();
-          exportBalanceCSV();
-        },
-        true
-      );
-    });
-  }
-
-  function hydrateReportHeader() {
-    const updated = $("report-updated");
-    if (updated && updated.innerText.includes("--")) {
-      updated.textContent = `Última actualización: ${new Date().toLocaleString("es-CL")}`;
+    if (pdfBtn && pdfBtn.dataset.fix !== "1") {
+      pdfBtn.dataset.fix = "1";
+      pdfBtn.onclick = exportarPDF;
+      pdfBtn.addEventListener("click", function(e){ e.preventDefault(); exportarPDF(); });
     }
 
-    const totals = safeGetTotals();
-    const budget = safeBudget();
-    const avance = budget ? (totals.neto / budget) * 100 : 0;
+    if (excelBtn && excelBtn.dataset.fix !== "1") {
+      excelBtn.dataset.fix = "1";
+      excelBtn.onclick = exportarExcelCompleto;
+      excelBtn.addEventListener("click", function(e){ e.preventDefault(); exportarExcelCompleto(); });
+    }
 
-    if ($("kpi-presupuesto")) $("kpi-presupuesto").textContent = formatCLP(budget);
-    if ($("kpi-ejecutado")) $("kpi-ejecutado").textContent = formatCLP(totals.neto);
-    if ($("kpi-avance")) $("kpi-avance").textContent = formatPct(avance);
-    if ($("kpi-iva")) $("kpi-iva").textContent = formatCLP(totals.iva);
-    if ($("kpi-avance-bar")) $("kpi-avance-bar").style.width = `${Math.min(avance, 100)}%`;
-
-    if ($("trib-base-neta")) $("trib-base-neta").textContent = formatCLP(totals.neto);
-    if ($("trib-iva-cf")) $("trib-iva-cf").textContent = formatCLP(totals.iva);
-
-    try {
-      if (Array.isArray(gastos)) {
-        const docsConCF = gastos.filter((g) => toNumber(g.iva) > 0).length;
-        const docsSinCF = gastos.length - docsConCF;
-        if ($("trib-docs-cf")) $("trib-docs-cf").textContent = String(docsConCF);
-        if ($("trib-docs-sin-cf")) $("trib-docs-sin-cf").textContent = String(docsSinCF);
-      }
-    } catch (_) {}
+    if (detalleBtn && detalleBtn.dataset.fix !== "1") {
+      detalleBtn.dataset.fix = "1";
+      detalleBtn.onclick = toggleDetalle;
+      detalleBtn.addEventListener("click", function(e){ e.preventDefault(); toggleDetalle(); });
+    }
   }
 
-  function setupFix() {
-    window.exportToExcel = exportWorkbook;
-    window.exportToPDF = exportReportPDF;
-    window.toggleDetalle = toggleReportDetail;
-    window.exportBalanceCSV = exportBalanceCSV;
-    window.exportarBalanceRealDesdeReportes = exportBalanceCSV;
+  function boot() {
+    // Define las funciones que el HTML llama con onclick.
+    window.exportToPDF = exportarPDF;
+    window.exportToExcel = exportarExcelCompleto;
+    window.toggleDetalle = toggleDetalle;
+    window.exportarBalanceRealCSV = exportarBalanceCSV;
+    window.actualizarVistaReportes = actualizarVistaReportes;
 
-    hydrateReportHeader();
-    insertBalanceExportButtons();
-    interceptOldBalanceButtons();
-  }
+    conectarBotones();
+    actualizarVistaReportes();
 
-  document.addEventListener("DOMContentLoaded", () => {
-    setupFix();
-    const observer = new MutationObserver(() => setupFix());
+    // La app renderiza después de cargar datos desde Supabase, por eso se refresca varias veces.
+    let count = 0;
+    const interval = setInterval(() => {
+      conectarBotones();
+      actualizarVistaReportes();
+      if (++count > 12) clearInterval(interval);
+    }, 700);
+
+    const observer = new MutationObserver(() => {
+      conectarBotones();
+      if ($("section-reportes")) actualizarVistaReportes();
+    });
     observer.observe(document.body, { childList: true, subtree: true });
-  });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
 })();
