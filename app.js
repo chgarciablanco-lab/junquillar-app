@@ -17,14 +17,16 @@ const DEFAULT_WIDGETS = ["cat","mensual","proveedores","iva","avance","documento
 let activeWidgets = JSON.parse(localStorage.getItem(REPORT_WIDGETS_KEY) || JSON.stringify(DEFAULT_WIDGETS));
 
 const views = {
-  resumen:     { title:"Resumen",            subtitle:"Vista ejecutiva del proyecto",                        visible:["section-kpis","section-alerts","section-bottom"] },
-  control:     { title:"Control de Proyecto",subtitle:"Avance presupuestario, partidas e hitos",             visible:["section-control"] },
+  resumen:     { title:"Resumen",            subtitle:"Vista ejecutiva y control del proyecto",               visible:["section-kpis","section-alerts","section-control"] },
   gastos:      { title:"Gastos",             subtitle:"Registro y control de egresos del proyecto",          visible:["section-filtro-solo","section-docs"] },
   documentos:  { title:"Documentos",         subtitle:"Carga de facturas, boletas y respaldo documental",    visible:["section-upload-only"] },
   proveedores: { title:"Proveedores",        subtitle:"Análisis por proveedor, documentos y concentración",  visible:["section-proveedores"] },
   caja:        { title:"Caja e IVA",         subtitle:"Crédito fiscal, documentos y detalle mensual",        visible:["section-caja"] },
   balance:     { title:"Balance",            subtitle:"Vista contable calculada desde los gastos registrados",visible:["section-balance"] },
-  reportes:    { title:"Reportes",           subtitle:"Análisis resumido por categoría y mes",               visible:["section-reportes"] }
+  reportes:    { title:"Reportes",           subtitle:"Análisis resumido por categoría y mes",               visible:["section-reportes"] },
+  ventas:       { title:"Ventas",            subtitle:"Ingresos, cotizaciones y contactos del proyecto",     visible:["section-ventas"] },
+  insumos:      { title:"Insumos",           subtitle:"Control de materiales y stock en obra",               visible:["section-insumos"] },
+  configuracion:{ title:"Configuración",     subtitle:"Ajustes generales del proyecto y apariencia",         visible:["section-config"] }
 };
 
 const $ = id => document.getElementById(id);
@@ -157,12 +159,14 @@ function renderBudgetEditor(){
 function renderKPIs(){
   const el=$("section-kpis");if(!el)return;
   const t=getTotals(),avance=PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0;
+  const saldo=Math.max(PROJECT_BUDGET-t.neto,0);
+  const chipStyle=(bg,color)=>`background:${bg};color:${color};border:1px solid ${color}33`;
   el.innerHTML=[
-    ["Inversión total neta",formatoCLP(t.neto),formatoPct(avance),`${t.docs} documentos registrados`],
-    ["IVA crédito fiscal",formatoCLP(t.iva),t.iva>0?"CF":"0","Calculado desde IVA registrado"],
-    ["Total documentos",formatoCLP(t.total),`${t.proveedores} prov.`,"Total bruto acumulado"],
-    ["Pendientes OCR",String(t.pendientesOcr),t.pendientesOcr>0?"pend.":"ok",`${t.sinProveedor} sin proveedor`]
-  ].map(k=>`<div class="kpi-card"><div class="kpi-top"><div><div class="kpi-title">${k[0]}</div><div class="kpi-value">${k[1]}</div></div><span class="badge up">${k[2]}</span></div><div class="kpi-footer">${k[3]}</div></div>`).join("");
+    {title:"Avance financiero",    value:formatoPct(avance),      chip:["Ejecutado",chipStyle(avance>=90?"#fee2e2":avance>=70?"#fef3c7":"#d1fae5",avance>=90?"#dc2626":avance>=70?"#d97706":"#059669")], footer:`${formatoCLP(t.neto)} ejecutado de ${formatoCLP(PROJECT_BUDGET)}`},
+    {title:"Inversión neta",       value:formatoCLP(t.neto),      chip:[`${t.docs} docs`,chipStyle("#eff6ff","#3b82f6")], footer:`${t.proveedores} proveedores · ${t.docs} documentos registrados`},
+    {title:"Saldo disponible",     value:formatoCLP(saldo),        chip:[saldo>0?"Disponible":"Agotado",chipStyle(saldo>0?"#d1fae5":"#fee2e2",saldo>0?"#059669":"#dc2626")], footer:"Presupuesto referencial menos lo ejecutado"},
+    {title:"IVA crédito fiscal",   value:formatoCLP(t.iva),       chip:["CF deducible",chipStyle("#f5f3ff","#7c3aed")], footer:`${t.pendientesOcr} documentos pendientes OCR`},
+  ].map(k=>`<div class="kpi-card"><div class="kpi-top"><div><div class="kpi-title">${k.title}</div><div class="kpi-value">${k.value}</div></div><span class="kpi-chip" style="${k.chip[1]}">${k.chip[0]}</span></div><div class="kpi-footer">${k.footer}</div></div>`).join("");
   const sf=document.querySelector(".sidebar-card .progress-fill");
   const sb=document.querySelector(".sidebar-card .big");
   const ss=document.querySelector(".sidebar-card .sub");
@@ -172,25 +176,37 @@ function renderKPIs(){
 }
 function renderAlerts(){
   const el=$("alerts-list");if(!el)return;
-  if(!gastos.length){el.innerHTML=emptyState("Sin alertas.");return;}
-  const t=getTotals();
-  el.innerHTML=[
-    ["📄",`${t.pendientesOcr} documentos pendientes OCR`,"Registros que requieren revisión documental."],
-    ["⚠️",`${t.sinProveedor} registros incompletos`,"Gastos sin proveedor registrado."],
-    ["💵",`${formatoCLP(t.iva)} de IVA crédito fiscal`,"Monto calculado desde los documentos."],
-    ["📊",`${formatoPct(PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0)} de avance financiero`,"Avance calculado contra presupuesto."]
-  ].map(a=>`<div class="alert-item"><div class="alert-icon">${a[0]}</div><div><div class="alert-title">${a[1]}</div><div class="alert-sub">${a[2]}</div></div></div>`).join("");
+  const t=getTotals(),avance=PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0;
+  const saldo=Math.max(PROJECT_BUDGET-t.neto,0);
+  const alertItems=[
+    {icon:"📄",title:`${t.pendientesOcr} documentos pendientes OCR`,sub:"Requieren revisión documental",warn:t.pendientesOcr>0},
+    {icon:"⚠️",title:`${t.sinProveedor} registros sin proveedor`,sub:"Datos de proveedor incompletos",warn:t.sinProveedor>0},
+    {icon:"💵",title:`${formatoCLP(t.iva)} IVA crédito fiscal`,sub:"Monto deducible acumulado",warn:false},
+    {icon:"📊",title:`${formatoPct(avance)} avance financiero`,sub:"Contra presupuesto referencial",warn:avance>=90},
+  ].map(a=>`<div class="resumen-alert-item${a.warn?" resumen-alert-warn":""}"><span class="resumen-alert-icon">${a.icon}</span><div><div class="resumen-alert-title">${a.title}</div><div class="resumen-alert-sub">${a.sub}</div></div></div>`).join("");
+  const hitos=[
+    {icon:"📄",label:"Documentación",estado:t.pendientesOcr>0?"Pendiente":"Completo",   desc:`${t.pendientesOcr} docs pendientes OCR`,    ok:t.pendientesOcr===0},
+    {icon:"💰",label:"Presupuesto",  estado:t.neto>PROJECT_BUDGET?"Sobre ppto":"En control",desc:`${formatoCLP(t.neto)} ejecutado`,         ok:t.neto<=PROJECT_BUDGET},
+    {icon:"🏢",label:"Proveedores",  estado:t.proveedores>0?"Con actividad":"Sin actividad",desc:`${t.proveedores} proveedores`,             ok:t.proveedores>0},
+    {icon:"📊",label:"Avance",       estado:t.neto>0?"En progreso":"Sin inicio",          desc:`${formatoPct(avance)} del presupuesto`,     ok:t.neto>0},
+  ].map(h=>`<div class="hito-tile"><div class="hito-tile-top"><span class="hito-tile-icon">${h.icon}</span><span class="status ${h.ok?"s-green":"s-amber"}">${h.estado}</span></div><div class="hito-tile-label">${h.label}</div><div class="hito-tile-desc">${h.desc}</div></div>`).join("");
+  el.innerHTML=`<div class="resumen-2col">
+    <div class="resumen-left-col">
+      <div class="resumen-avance-wrap">
+        <div class="resumen-avance-pct">${formatoPct(avance)}</div>
+        <div class="resumen-avance-label">de avance financiero</div>
+        <div class="cat-track resumen-bar"><div class="cat-fill" style="width:${Math.min(avance,100)}%"></div></div>
+        <div class="resumen-avance-detail"><span>${formatoCLP(t.neto)} ejecutado</span><span>${formatoCLP(saldo)} disponible</span></div>
+      </div>
+      <div class="resumen-alerts-list">${alertItems}</div>
+    </div>
+    <div class="resumen-right-col">
+      <div class="resumen-hitos-title">Hitos del proyecto</div>
+      <div class="hitos-2x2">${hitos}</div>
+    </div>
+  </div>`;
 }
-function renderBottomCards(){
-  const el=$("section-bottom");if(!el)return;
-  const t=getTotals(),ultima=gastos.length?normalizarFecha(gastos[0].fecha):"—";
-  el.innerHTML=[
-    ["Proveedores",t.proveedores,"Únicos registrados","🏢"],
-    ["Último registro",ultima,"Según fecha de gasto","📅"],
-    ["Total bruto",formatoCLP(t.total),"Neto + IVA","💼"],
-    ["Avance presupuesto",formatoPct(PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0),"Contra presupuesto","📈"]
-  ].map(c=>`<div class="bottom-card"><div class="bottom-top"><div class="bottom-label">${c[0]}</div><div class="bottom-icon">${c[3]}</div></div><div class="bottom-value">${c[1]}</div><div class="bottom-sub">${c[2]}</div></div>`).join("");
-}
+function renderBottomCards(){ /* section-bottom no longer shown in resumen */ }
 
 /* ── GASTOS TABLE ─────────────────────────────────────────── */
 let selectedIds = new Set();
@@ -433,7 +449,7 @@ function renderBalance(){
 }
 
 /* ── CONTROL DE PROYECTO ──────────────────────────────────── */
-function renderControlProyecto(){renderControlKpis();renderControlEtapas();renderControlHitos();renderControlCat();}
+function renderControlProyecto(){renderControlEtapas();renderControlCat();}
 function renderControlKpis(){
   const el=$("control-kpis");if(!el)return;
   const t=getTotals(),av=PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0;
@@ -448,8 +464,9 @@ function renderControlEtapas(){
   const el=$("control-etapas");if(!el)return;
   if(!gastos.length){el.innerHTML=emptyState("Sin avance registrado.");return;}
   const groups=groupBy(gastos,g=>g.categoria||"Sin categoría"),total=sumBy(gastos,"neto");
-  el.innerHTML=`<div class="etapas-cards-grid">${Object.entries(groups).map(([cat,rows])=>{
-    const monto=sumBy(rows,"neto"),pct=total?(monto/total)*100:0;
+  const sorted=Object.entries(groups).map(([cat,rows])=>({cat,rows,monto:sumBy(rows,"neto")})).sort((a,b)=>b.monto-a.monto);
+  el.innerHTML=`<div class="etapas-cards-grid">${sorted.map(({cat,rows,monto})=>{
+    const pct=total?(monto/total)*100:0,avg=rows.length?monto/rows.length:0;
     return`<div class="etapa-card-item">
       <div class="etapa-card-top">
         <span class="cat-badge ${getCategoriaClass(cat)}">${cat}</span>
@@ -459,7 +476,10 @@ function renderControlEtapas(){
       <div class="cat-track" style="margin-top:10px">
         <div class="cat-fill" style="width:${Math.min(pct,100)}%"></div>
       </div>
-      <div class="etapa-card-sub">${rows.length} documentos</div>
+      <div class="etapa-card-meta">
+        <span>${rows.length} doc${rows.length!==1?"s":""}</span>
+        <span>Prom. ${formatoCLP(avg)}</span>
+      </div>
     </div>`;
   }).join("")}</div>`;
 }
@@ -486,9 +506,143 @@ function renderControlHitos(){
 function renderControlCat(){
   const el=$("control-cat");if(!el)return;
   if(!gastos.length){el.innerHTML=emptyState("Sin costos.");return;}
-  const cg=groupBy(gastos,g=>g.categoria||"Sin categoría"),total=sumBy(gastos,"neto"),months=[...new Set(gastos.map(g=>mesLabel(g.fecha)))].sort();
-  el.innerHTML=Object.entries(cg).map(([cat,rows])=>{const bm=groupBy(rows,r=>mesLabel(r.fecha)),ct=sumBy(rows,"neto");const vals=Array.from({length:5}).map((_,i)=>`<div>${months[i]?formatoCLP(sumBy(bm[months[i]]||[],"neto")):"—"}</div>`).join("");return`<div class="table-row ctrl-cat-row"><div><span class="cat-badge ${getCategoriaClass(cat)}">${cat}</span></div><div>Gasto</div>${vals}<div>${formatoCLP(ct)}</div><div>${formatoPct(total?(ct/total)*100:0)}</div></div>`;}).join("");
+  const cg=groupBy(gastos,g=>g.categoria||"Sin categoría"),total=sumBy(gastos,"neto"),months=[...new Set(gastos.map(g=>mesLabel(g.fecha)))].sort().slice(0,5);
+  const head=document.querySelector(".ctrl-cat-head");
+  if(head) head.innerHTML=`<div>Categoría</div><div>Tipo</div>${months.map(m=>`<div>${m}</div>`).join("")}${Array.from({length:5-months.length}).map(()=>`<div></div>`).join("")}<div>Total</div><div>%</div>`;
+  const sorted=Object.entries(cg).sort((a,b)=>sumBy(b[1],"neto")-sumBy(a[1],"neto"));
+  el.innerHTML=sorted.map(([cat,rows])=>{
+    const bm=groupBy(rows,r=>mesLabel(r.fecha)),ct=sumBy(rows,"neto");
+    const vals=Array.from({length:5}).map((_,i)=>`<div>${months[i]?formatoCLP(sumBy(bm[months[i]]||[],"neto")):"—"}</div>`).join("");
+    return`<div class="table-row ctrl-cat-row"><div><span class="cat-badge ${getCategoriaClass(cat)}">${cat}</span></div><div style="font-size:11px;color:var(--muted)">Gasto</div>${vals}<div style="font-weight:600">${formatoCLP(ct)}</div><div><span class="kpi-chip" style="background:#d1fae511;color:#059669;border:1px solid #05966933">${formatoPct(total?(ct/total)*100:0)}</span></div></div>`;
+  }).join("");
 }
+
+/* ── EXPORT BAR ──────────────────────────────────────────── */
+let exportFormat = "csv";
+
+const EXPORT_REPORTS = [
+  { key:"gastos",       label:"Gastos",       icon:"📋" },
+  { key:"balance",      label:"Balance",      icon:"⚖️" },
+  { key:"proveedores",  label:"Proveedores",  icon:"🏢" },
+  { key:"ventas",       label:"Ventas",       icon:"💰" },
+  { key:"cotizaciones", label:"Cotizaciones", icon:"📝" },
+  { key:"contactos",    label:"Contactos",    icon:"👥" },
+  { key:"insumos",      label:"Insumos",      icon:"🔧" },
+  { key:"iva",          label:"IVA CF",       icon:"💵" },
+];
+
+function getExportData(key){
+  if(key==="gastos"){
+    return{ name:"Gastos", headers:["Fecha","Proveedor","RUT","Tipo Documento","N° Documento","Categoría","Neto","IVA","Total","Método Pago","Estado OCR"],
+      rows:gastos.map(g=>[normalizarFecha(g.fecha),g.proveedor||"",g.rut||"",g.tipo_documento||"",g.numero_documento||"",g.categoria||"",g.neto,g.iva,g.total,g.metodo_pago||"",g.estado_ocr||""]) };
+  }
+  if(key==="balance"){
+    const grps=groupBy(gastos,g=>g.categoria||"Sin categoría"),tot=sumBy(gastos,"neto");
+    const rows=Object.entries(grps).sort((a,b)=>sumBy(b[1],"neto")-sumBy(a[1],"neto")).map(([cat,rs])=>{
+      const neto=sumBy(rs,"neto"),iva=sumBy(rs,"iva"),t=sumBy(rs,"total");
+      return[cat,rs.length,neto,iva,t,tot?(neto/tot*100).toFixed(1)+"%":"0%"];
+    });
+    rows.push(["TOTAL",gastos.length,sumBy(gastos,"neto"),sumBy(gastos,"iva"),sumBy(gastos,"total"),"100%"]);
+    return{ name:"Balance", headers:["Categoría","N° Docs","Neto","IVA","Total","% s/ Total"], rows };
+  }
+  if(key==="proveedores"){
+    const grps=groupBy(gastos,g=>g.proveedor||"Pendiente"),tot=sumBy(gastos,"neto");
+    const rows=Object.entries(grps).map(([prov,rs])=>{
+      const neto=sumBy(rs,"neto"),iva=sumBy(rs,"iva"),t=sumBy(rs,"total");
+      return[prov,rs[0]?.rut||"",rs.length,neto,iva,t,tot?(neto/tot*100).toFixed(1)+"%":"0%"];
+    }).sort((a,b)=>b[3]-a[3]);
+    return{ name:"Proveedores", headers:["Proveedor","RUT","N° Docs","Neto","IVA","Total","% s/ Total"], rows };
+  }
+  if(key==="ventas"){
+    return{ name:"Ventas", headers:["Fecha","Concepto","Tipo","Monto","Estado"],
+      rows:ventasIngresos.map(v=>[v.fecha,v.concepto,v.tipo,v.monto,v.estado]) };
+  }
+  if(key==="cotizaciones"){
+    return{ name:"Cotizaciones", headers:["Fecha","Proveedor","Descripción","Neto","IVA","Total","Estado"],
+      rows:ventasCotizaciones.map(c=>[c.fecha,c.proveedor,c.descripcion,c.neto,c.iva,c.total,c.estado]) };
+  }
+  if(key==="contactos"){
+    return{ name:"Contactos", headers:["Nombre","Rol","Teléfono","Correo","Estado"],
+      rows:ventasContactos.map(c=>[c.nombre,c.rol,c.telefono,c.correo,c.estado]) };
+  }
+  if(key==="insumos"){
+    return{ name:"Insumos", headers:["Nombre","Categoría","Cantidad","Stock Mínimo","Unidad","Precio Unit.","Estado"],
+      rows:insumosData.map(i=>[i.nombre,i.categoria,i.cantidad,i.stock_min,i.unidad,i.precio_unit,i.estado]) };
+  }
+  if(key==="iva"){
+    const grps=groupBy(gastos,g=>mesLabel(g.fecha));
+    let acum=0;
+    const rows=Object.entries(grps).sort(([a],[b])=>a.localeCompare(b)).map(([mes,rs])=>{
+      const iva=sumBy(rs,"iva"),neto=sumBy(rs,"neto"),docs=rs.filter(g=>g.iva>0).length;
+      acum+=iva; return[mes,docs,neto,iva,acum];
+    });
+    return{ name:"IVA CF", headers:["Mes","Docs con CF","Neto","IVA CF","Acumulado CF"], rows };
+  }
+  return null;
+}
+
+function exportReport(key){
+  const d=getExportData(key);
+  if(!d||!d.rows.length){showToast("Sin datos para exportar.");return;}
+  if(exportFormat==="csv")   exportAsCSV(d.name,d.headers,d.rows);
+  if(exportFormat==="excel") exportAsExcel(d.name,d.headers,d.rows);
+  if(exportFormat==="pdf")   exportAsPDF(d.name,d.headers,d.rows);
+}
+function exportAsCSV(name,headers,rows){
+  const esc=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  const csv=[headers.join(";"),...rows.map(r=>r.map(esc).join(";"))].join("\n");
+  downloadText(`${name.toLowerCase().replace(/\s/g,"_")}_junqo.csv`,"﻿"+csv);
+  showToast(`✅ ${name} exportado como CSV`);
+}
+function exportAsExcel(name,headers,rows){
+  if(typeof window.XLSX==="undefined"){showToast("Librería Excel no disponible.");return;}
+  const ws=window.XLSX.utils.aoa_to_sheet([headers,...rows]);
+  const wb=window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(wb,ws,name.slice(0,31));
+  window.XLSX.writeFile(wb,`${name.toLowerCase().replace(/\s/g,"_")}_junqo.xlsx`);
+  showToast(`✅ ${name} exportado como Excel`);
+}
+function exportAsPDF(name,headers,rows){
+  const trs=rows.map(r=>`<tr>${r.map(c=>`<td>${c??""}</td>`).join("")}</tr>`).join("");
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${name} — Junqo</title>
+<style>body{font-family:system-ui,sans-serif;font-size:11px;padding:24px;color:#1e293b}
+h2{font-size:15px;color:#059669;margin-bottom:4px}p{font-size:11px;color:#64748b;margin-bottom:16px}
+table{width:100%;border-collapse:collapse}
+th{background:#f1f5f9;font-weight:600;padding:7px 9px;text-align:left;border-bottom:2px solid #e2e8f0;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+td{padding:6px 9px;border-bottom:1px solid #f1f5f9;font-size:11px}
+tr:last-child td{border-bottom:none}
+.footer{margin-top:18px;font-size:9px;color:#94a3b8}
+@media print{body{padding:0}}</style></head><body>
+<h2>${name} — Junqo · Casa Junquillar</h2>
+<p>Generado el ${new Date().toLocaleString("es-CL")}</p>
+<table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>${trs}</tbody></table>
+<div class="footer">Junqo App · Casa Junquillar · ${new Date().getFullYear()}</div>
+<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script>
+</body></html>`;
+  const w=window.open("","_blank","width=900,height=700");
+  if(w){w.document.write(html);w.document.close();}
+  showToast(`🖨️ ${name} listo para imprimir / guardar PDF`);
+}
+function setExportFormat(fmt){
+  exportFormat=fmt;
+  renderExportBar();
+}
+function renderExportBar(){
+  const el=$("reportes-export");if(!el)return;
+  const fmts=[{key:"csv",label:"CSV",icon:"📄"},{key:"excel",label:"Excel",icon:"📊"},{key:"pdf",label:"PDF / Imprimir",icon:"🖨️"}];
+  el.innerHTML=`
+    <div class="export-bar-top">
+      <span class="export-bar-label">Formato:</span>
+      <div class="export-fmt-row">
+        ${fmts.map(f=>`<button class="export-fmt-btn${exportFormat===f.key?" export-fmt-active":""}" onclick="setExportFormat('${f.key}')">${f.icon} ${f.label}</button>`).join("")}
+      </div>
+    </div>
+    <div class="export-chips-row">
+      ${EXPORT_REPORTS.map(r=>`<button class="export-chip" onclick="exportReport('${r.key}')">${r.icon} ${r.label}</button>`).join("")}
+    </div>`;
+}
+window.setExportFormat=setExportFormat;
+window.exportReport=exportReport;
 
 /* ── REPORTES ─────────────────────────────────────────────── */
 const WIDGET_DEFS = {
@@ -503,6 +657,7 @@ const WIDGET_DEFS = {
 };
 
 function renderReportes(){
+  renderExportBar();
   renderReportConfig();
   renderReportWidgets();
 }
@@ -614,6 +769,7 @@ function renderAll(){
   renderDocs(docsVisibleLimit);renderProveedores();
   renderCaja();renderBalance();renderControlProyecto();
   renderReportes();renderBudgetEditor();
+  renderVentas();renderInsumos();renderConfiguracion();
 }
 
 /* ── CSV EXPORT ───────────────────────────────────────────── */
@@ -640,6 +796,283 @@ function setupButtons(){
   $("btn-bulk-delete")?.addEventListener("click",bulkDelete);
   $("btn-bulk-cancel")?.addEventListener("click",cancelBulkSelection);
 }
+/* ── VENTAS DATA ─────────────────────────────────────────── */
+const ventasIngresos = [
+  {id:1, fecha:"2024-05-23", concepto:"Aporte mensual — Mayo",          tipo:"Transferencia", monto:5000000,  estado:"Recibido"},
+  {id:2, fecha:"2024-05-10", concepto:"Anticipo Etapa 1 — Estructura",  tipo:"Cheque",        monto:15000000, estado:"Recibido"},
+  {id:3, fecha:"2024-04-28", concepto:"Aporte mensual — Abril",         tipo:"Transferencia", monto:5000000,  estado:"Recibido"},
+  {id:4, fecha:"2024-04-05", concepto:"Anticipo inicial del proyecto",   tipo:"Transferencia", monto:20000000, estado:"Recibido"},
+];
+const ventasCotizaciones = [
+  {id:1, fecha:"2024-05-20", proveedor:"Constructora XYZ",      descripcion:"Estructura metálica techumbre",  neto:8500000, iva:1615000, total:10115000, estado:"Pendiente"},
+  {id:2, fecha:"2024-05-15", proveedor:"Electricistas Ramírez", descripcion:"Instalación eléctrica completa", neto:3200000, iva:608000,  total:3808000,  estado:"Aprobada"},
+  {id:3, fecha:"2024-04-30", proveedor:"Gasfitería Central",    descripcion:"Red agua fría y caliente",       neto:2800000, iva:532000,  total:3332000,  estado:"Aprobada"},
+  {id:4, fecha:"2024-04-22", proveedor:"Pinturas del Sur SA",   descripcion:"Pintura interior y exterior",    neto:1900000, iva:361000,  total:2261000,  estado:"Rechazada"},
+];
+const ventasContactos = [
+  {id:1, nombre:"Christian García B.", rol:"Propietario", telefono:"+56 9 8765 4321", correo:"chgarciablanco@gmail.com", estado:"Activo"},
+  {id:2, nombre:"Arq. Patricia López",  rol:"Arquitecto",  telefono:"+56 9 7654 3210", correo:"plopez@arq.cl",            estado:"Activo"},
+  {id:3, nombre:"Constructora XYZ",     rol:"Contratista", telefono:"+56 2 2345 6789", correo:"contacto@xyz.cl",          estado:"Activo"},
+  {id:4, nombre:"Inspector Municipal",  rol:"Inspector",   telefono:"+56 2 2234 5678", correo:"insp@municipio.cl",        estado:"Activo"},
+];
+let ventasTab = "ingresos";
+
+/* ── INSUMOS DATA ────────────────────────────────────────── */
+const insumosData = [
+  {id:1,  nombre:"Cemento Portland",       categoria:"Materiales", unidad:"saco",   cantidad:45,  stock_min:10,  precio_unit:8500,  estado:"En stock"},
+  {id:2,  nombre:"Fierro 10mm",            categoria:"Materiales", unidad:"barra",  cantidad:120, stock_min:20,  precio_unit:4200,  estado:"En stock"},
+  {id:3,  nombre:"Madera pino 2x4",        categoria:"Materiales", unidad:"unidad", cantidad:8,   stock_min:15,  precio_unit:3800,  estado:"Bajo stock"},
+  {id:4,  nombre:"Ladrillos cerámicos",    categoria:"Materiales", unidad:"unidad", cantidad:0,   stock_min:100, precio_unit:220,   estado:"Agotado"},
+  {id:5,  nombre:"Esmalte blanco 1gl",     categoria:"Pinturas",   unidad:"galón",  cantidad:12,  stock_min:4,   precio_unit:18500, estado:"En stock"},
+  {id:6,  nombre:"Cemento cola",           categoria:"Materiales", unidad:"saco",   cantidad:7,   stock_min:5,   precio_unit:9200,  estado:"En stock"},
+  {id:7,  nombre:"Guantes de cuero",       categoria:"EPP",        unidad:"par",    cantidad:3,   stock_min:5,   precio_unit:4500,  estado:"Bajo stock"},
+  {id:8,  nombre:"Casco de seguridad",     categoria:"EPP",        unidad:"unidad", cantidad:6,   stock_min:4,   precio_unit:12000, estado:"En stock"},
+  {id:9,  nombre:"Cable eléctrico 2,5mm",  categoria:"Eléctrico",  unidad:"metro",  cantidad:180, stock_min:50,  precio_unit:850,   estado:"En stock"},
+  {id:10, nombre:"Tubería PVC 4\"",         categoria:"Gasfitería", unidad:"metro",  cantidad:22,  stock_min:10,  precio_unit:3200,  estado:"En stock"},
+];
+let insumosQuery = "";
+let insumosFilterCat = "";
+
+/* ── VENTAS RENDER ───────────────────────────────────────── */
+function renderVentas(){
+  const el = $("ventas-root");
+  if(!el) return;
+  const badge = e => {
+    const m = {Recibido:{bg:"var(--green-soft)",c:"var(--green)"},Pendiente:{bg:"var(--amber-soft)",c:"var(--amber)"},Aprobada:{bg:"var(--green-soft)",c:"var(--green)"},Rechazada:{bg:"var(--red-soft)",c:"var(--red)"},Activo:{bg:"var(--green-soft)",c:"var(--green)"}};
+    const s = m[e]||{bg:"#f8fafc",c:"var(--muted)"};
+    return `<span class="jv-badge" style="background:${s.bg};color:${s.c}">${e}</span>`;
+  };
+  const tabBar = `<div class="jv-tabs">
+    <button class="jv-tab${ventasTab==="ingresos"?" jv-tab-active":""}" onclick="setVentasTab('ingresos')">Ingresos</button>
+    <button class="jv-tab${ventasTab==="cotizaciones"?" jv-tab-active":""}" onclick="setVentasTab('cotizaciones')">Cotizaciones</button>
+    <button class="jv-tab${ventasTab==="contactos"?" jv-tab-active":""}" onclick="setVentasTab('contactos')">Contactos</button>
+  </div>`;
+  let content = "";
+  if(ventasTab === "ingresos"){
+    const total = ventasIngresos.reduce((a,r)=>a+r.monto,0);
+    content = `<div class="kpi-grid" style="margin-bottom:20px">
+      <div class="kpi-card"><div class="kpi-title">Total ingresos</div><div class="kpi-value">${formatoCLP(total)}</div><div class="kpi-footer">${ventasIngresos.length} aportes</div></div>
+      <div class="kpi-card"><div class="kpi-title">Recibidos</div><div class="kpi-value">${ventasIngresos.filter(r=>r.estado==="Recibido").length}</div><div class="kpi-footer">Confirmados</div></div>
+      <div class="kpi-card"><div class="kpi-title">Último ingreso</div><div class="kpi-value">${normalizarFecha(ventasIngresos[0]?.fecha)}</div><div class="kpi-footer">Más reciente</div></div>
+      <div class="kpi-card"><div class="kpi-title">Promedio por aporte</div><div class="kpi-value">${formatoCLP(total/ventasIngresos.length)}</div><div class="kpi-footer">Calculado</div></div>
+    </div>
+    <div class="card"><div class="card-title">Registro de aportes e ingresos</div>
+      <div class="table-wrap"><div class="table-head jv-ing-head"><div>Fecha</div><div>Concepto</div><div>Tipo</div><div style="text-align:right">Monto</div><div>Estado</div></div>
+      <div>${ventasIngresos.map(r=>`<div class="table-row jv-ing-row"><div>${normalizarFecha(r.fecha)}</div><div class="doc-name">${r.concepto}</div><div style="font-size:12px;color:var(--muted)">${r.tipo}</div><div style="text-align:right;font-weight:600">${formatoCLP(r.monto)}</div><div>${badge(r.estado)}</div></div>`).join("")}</div>
+    </div></div>`;
+  }
+  if(ventasTab === "cotizaciones"){
+    const aprobadas = ventasCotizaciones.filter(c=>c.estado==="Aprobada");
+    content = `<div class="kpi-grid" style="margin-bottom:20px">
+      <div class="kpi-card"><div class="kpi-title">Total cotizaciones</div><div class="kpi-value">${ventasCotizaciones.length}</div><div class="kpi-footer">Registradas</div></div>
+      <div class="kpi-card"><div class="kpi-title">Aprobadas</div><div class="kpi-value">${aprobadas.length}</div><div class="kpi-footer">Tasa ${Math.round(aprobadas.length/ventasCotizaciones.length*100)}%</div></div>
+      <div class="kpi-card"><div class="kpi-title">Monto aprobado</div><div class="kpi-value">${formatoCLP(aprobadas.reduce((a,c)=>a+c.total,0))}</div><div class="kpi-footer">Neto + IVA</div></div>
+      <div class="kpi-card"><div class="kpi-title">Pendientes</div><div class="kpi-value">${ventasCotizaciones.filter(c=>c.estado==="Pendiente").length}</div><div class="kpi-footer">Por revisar</div></div>
+    </div>
+    <div class="card"><div class="card-title">Cotizaciones de contratistas</div>
+      <div class="table-wrap"><div class="table-head jv-cot-head"><div>Fecha</div><div>Proveedor</div><div>Descripción</div><div style="text-align:right">Neto</div><div style="text-align:right">IVA</div><div style="text-align:right">Total</div><div>Estado</div></div>
+      <div>${ventasCotizaciones.map(c=>`<div class="table-row jv-cot-row"><div>${normalizarFecha(c.fecha)}</div><div class="doc-name">${c.proveedor}</div><div style="font-size:12px;color:var(--muted)">${c.descripcion}</div><div style="text-align:right">${formatoCLP(c.neto)}</div><div style="text-align:right">${formatoCLP(c.iva)}</div><div style="text-align:right;font-weight:600">${formatoCLP(c.total)}</div><div>${badge(c.estado)}</div></div>`).join("")}</div>
+    </div></div>`;
+  }
+  if(ventasTab === "contactos"){
+    content = `<div class="card"><div class="card-title">Contactos del proyecto</div><div class="card-sub">${ventasContactos.length} personas y organizaciones vinculadas</div>
+      <div class="table-wrap" style="margin-top:14px"><div class="table-head jv-cont-head"><div>Nombre</div><div>Rol</div><div>Teléfono</div><div>Correo</div><div>Estado</div></div>
+      <div>${ventasContactos.map(c=>`<div class="table-row jv-cont-row"><div class="doc-name">${c.nombre}</div><div><span class="jv-badge" style="background:var(--sky-soft);color:var(--sky)">${c.rol}</span></div><div style="font-size:12px">${c.telefono}</div><div style="font-size:12px;color:var(--muted)">${c.correo}</div><div>${badge(c.estado)}</div></div>`).join("")}</div>
+    </div></div>`;
+  }
+  el.innerHTML = tabBar + content;
+}
+function setVentasTab(tab){ ventasTab = tab; renderVentas(); }
+
+/* ── INSUMOS RENDER ──────────────────────────────────────── */
+function renderInsumos(){
+  const el = $("insumos-root");
+  if(!el) return;
+  const filtered = insumosData.filter(i=>{
+    const q = insumosQuery.toLowerCase();
+    return (!q || i.nombre.toLowerCase().includes(q) || i.categoria.toLowerCase().includes(q))
+        && (!insumosFilterCat || i.categoria === insumosFilterCat);
+  });
+  const ec = {"En stock":{bg:"var(--green-soft)",c:"var(--green)"},"Bajo stock":{bg:"var(--amber-soft)",c:"var(--amber)"},"Agotado":{bg:"var(--red-soft)",c:"var(--red)"}};
+  const cats = [...new Set(insumosData.map(i=>i.categoria))];
+  const totalValor = insumosData.reduce((a,i)=>a+i.cantidad*i.precio_unit,0);
+  el.innerHTML = `
+  <div class="kpi-grid" style="margin-bottom:20px">
+    <div class="kpi-card"><div class="kpi-title">En stock</div><div class="kpi-value">${insumosData.filter(i=>i.estado==="En stock").length}</div><div class="kpi-footer">De ${insumosData.length} ítems</div></div>
+    <div class="kpi-card"><div class="kpi-title">Bajo stock</div><div class="kpi-value">${insumosData.filter(i=>i.estado==="Bajo stock").length}</div><div class="kpi-footer">Requieren reposición</div></div>
+    <div class="kpi-card"><div class="kpi-title">Agotados</div><div class="kpi-value">${insumosData.filter(i=>i.estado==="Agotado").length}</div><div class="kpi-footer">Sin unidades</div></div>
+    <div class="kpi-card"><div class="kpi-title">Valor inventario</div><div class="kpi-value">${formatoCLP(totalValor)}</div><div class="kpi-footer">Cantidad × precio unit.</div></div>
+  </div>
+  <div class="card filter-card" style="margin-bottom:16px">
+    <div class="filter-search-wrap"><span class="filter-search-icon">🔍</span>
+      <input type="text" class="filter-search-input" placeholder="Buscar insumo o categoría…" value="${insumosQuery}" oninput="insumosQuery=this.value;renderInsumos()"/>
+    </div>
+    <div class="filter-row" style="margin-top:12px">
+      <div class="filter-group"><label class="filter-label">Categoría</label>
+        <select class="filter-select" onchange="insumosFilterCat=this.value;renderInsumos()">
+          <option value="">Todas</option>
+          ${cats.map(c=>`<option${insumosFilterCat===c?" selected":""}>${c}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="card"><div class="card-title">Inventario de materiales e insumos</div>
+    <div class="card-sub">${filtered.length} ítem${filtered.length!==1?"s":""} encontrado${filtered.length!==1?"s":""}</div>
+    <div class="table-wrap"><div class="table-head ins-head">
+      <div>Insumo</div><div>Categoría</div><div style="text-align:right">Cantidad</div>
+      <div>Unidad</div><div style="text-align:right">Precio unit.</div>
+      <div style="text-align:right">Valor total</div><div>Estado</div>
+    </div>
+    <div>${filtered.length ? filtered.map(i=>{
+      const s = ec[i.estado]||{bg:"#f8fafc",c:"var(--muted)"};
+      return`<div class="table-row ins-row"><div class="doc-name">${i.nombre}</div>
+        <div><span class="cat-badge ${getCategoriaClass(i.categoria)}">${i.categoria}</span></div>
+        <div style="text-align:right">${i.cantidad}</div><div style="font-size:12px;color:var(--muted)">${i.unidad}</div>
+        <div style="text-align:right;font-size:12px">${formatoCLP(i.precio_unit)}</div>
+        <div style="text-align:right;font-weight:600">${formatoCLP(i.cantidad*i.precio_unit)}</div>
+        <div><span class="jv-badge" style="background:${s.bg};color:${s.c}">${i.estado}</span></div>
+      </div>`;}).join("") : emptyState("Sin insumos que coincidan.")}</div>
+  </div></div>`;
+}
+
+/* ── CONFIGURACIÓN RENDER ────────────────────────────────── */
+const cfgUsers = [
+  {nombre:"Christian García B.", cargo:"Administrador", rol:"Admin",    correo:"chgarciablanco@gmail.com", activo:true},
+  {nombre:"Arq. Patricia López",  cargo:"Arquitecto",   rol:"Revisor",  correo:"plopez@arq.cl",            activo:true},
+  {nombre:"Inspector Municipal",  cargo:"Fiscalizador", rol:"Inspector",correo:"insp@municipio.cl",        activo:true},
+];
+const cfgCategorias = {
+  "Gastos":  ["Materiales","Mano de obra","Servicios","Herramientas","Transporte"],
+  "Insumos": ["Materiales","Pinturas","EPP","Eléctrico","Gasfitería"],
+};
+const cfgAvBg = ["#059669","#0284c7","#d97706","#e11d48","#8b5cf6"];
+
+function renderConfiguracion(){
+  const el = $("config-root");
+  if(!el) return;
+  const av = (n,i) => `<div class="cfg2-avatar" style="background:${cfgAvBg[i%cfgAvBg.length]}">${n.split(" ").map(p=>p[0]).slice(0,2).join("")}</div>`;
+  const rolBg = {Admin:{bg:"var(--green-soft)",c:"var(--green)"},Revisor:{bg:"var(--sky-soft)",c:"var(--sky)"},Inspector:{bg:"var(--amber-soft)",c:"var(--amber)"}};
+  el.innerHTML = `
+  <div class="cfg2-grid">
+    <div class="card">
+      <div class="cfg2-head"><div class="cfg2-icon">🏗️</div><div><div class="card-title">Datos del proyecto</div><div class="card-sub">Información general</div></div></div>
+      <div class="cfg2-form">
+        <label class="cfg2-label">Nombre del proyecto<input class="filter-select" value="${PROJECT_NAME}" style="height:38px;width:100%"></label>
+        <label class="cfg2-label">Administrador<input class="filter-select" value="Christian García B." style="height:38px;width:100%"></label>
+        <label class="cfg2-label">Presupuesto (CLP)<input class="filter-select" value="${PROJECT_BUDGET.toLocaleString("es-CL")}" style="height:38px;width:100%"></label>
+        <label class="cfg2-label">Fecha de inicio<input type="date" class="filter-select" value="2024-01-15" style="height:38px;width:100%"></label>
+        <label class="cfg2-label" style="grid-column:1/-1">Dirección<input class="filter-select" value="Sector Junquillar, Región Metropolitana" style="height:38px;width:100%"></label>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="filter-btn-apply" onclick="showToast('✓ Datos guardados correctamente')">Guardar cambios</button>
+        <button class="filter-btn-clear" onclick="renderConfiguracion()">Cancelar</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cfg2-head"><div class="cfg2-icon">👥</div><div><div class="card-title">Usuarios del proyecto</div><div class="card-sub">${cfgUsers.filter(u=>u.activo).length} activos</div></div></div>
+      <div class="cfg2-users">
+        ${cfgUsers.map((u,i)=>`<div class="cfg2-user-row">${av(u.nombre,i)}
+          <div class="cfg2-user-info"><strong>${u.nombre}</strong><small>${u.cargo}</small></div>
+          <small class="cfg2-email">${u.correo}</small>
+          <span class="jv-badge" style="background:${rolBg[u.rol]?.bg||"#f8fafc"};color:${rolBg[u.rol]?.c||"var(--muted)"}">${u.rol}</span>
+          <span class="jv-badge" style="background:var(--green-soft);color:var(--green)">● Activo</span>
+        </div>`).join("")}
+      </div>
+      <button class="filter-btn-apply" style="margin-top:14px" onclick="showToast('✓ Función disponible próximamente')">+ Agregar usuario</button>
+    </div>
+  </div>
+  <div class="cfg2-grid" style="margin-top:16px">
+    <div class="card">
+      <div class="cfg2-head"><div class="cfg2-icon">🏷️</div><div><div class="card-title">Categorías</div><div class="card-sub">Gastos e insumos</div></div></div>
+      ${Object.entries(cfgCategorias).map(([grupo,cats])=>`
+        <div style="margin-bottom:14px">
+          <div class="cfg2-group-label">${grupo}</div>
+          <div class="cfg2-tags">
+            ${cats.map(c=>`<span class="cfg2-tag">${c}<button class="cfg2-tag-del" onclick="this.closest('.cfg2-tag').remove()">×</button></span>`).join("")}
+            <button class="cfg2-tag-add" onclick="cfg2AddTag(this)">+ Agregar</button>
+          </div>
+        </div>`).join("")}
+    </div>
+    <div class="card">
+      <div class="cfg2-head"><div class="cfg2-icon">🎨</div><div><div class="card-title">Apariencia</div><div class="card-sub">Tema y color de acento</div></div></div>
+      <div class="cfg2-group-label">Tema de la interfaz</div>
+      <div class="cfg2-theme-group">
+        <button class="cfg2-theme-btn active" onclick="cfg2SetTheme(this)">☀️ Claro</button>
+        <button class="cfg2-theme-btn" onclick="cfg2SetTheme(this)">🌙 Oscuro</button>
+        <button class="cfg2-theme-btn" onclick="cfg2SetTheme(this)">💻 Sistema</button>
+      </div>
+      <div class="cfg2-group-label" style="margin-top:18px">Color de acento</div>
+      <div class="cfg2-colors">
+        <button class="cfg2-color active" style="background:#059669" onclick="cfg2SetColor(this,'#059669','#ecfdf5')" title="Verde (defecto)"></button>
+        <button class="cfg2-color" style="background:#0b4f6c" onclick="cfg2SetColor(this,'#0b4f6c','#f0f9ff')" title="Azul marino"></button>
+        <button class="cfg2-color" style="background:#0284c7" onclick="cfg2SetColor(this,'#0284c7','#e0f2fe')" title="Azul"></button>
+        <button class="cfg2-color" style="background:#8b5cf6" onclick="cfg2SetColor(this,'#8b5cf6','#f5f3ff')" title="Violeta"></button>
+        <button class="cfg2-color" style="background:#d97706" onclick="cfg2SetColor(this,'#d97706','#fffbeb')" title="Ámbar"></button>
+        <button class="cfg2-color" style="background:#e11d48" onclick="cfg2SetColor(this,'#e11d48','#fff1f2')" title="Rojo"></button>
+      </div>
+      <button class="filter-btn-apply" style="margin-top:18px;width:100%" onclick="showToast('✓ Apariencia guardada')">Guardar apariencia</button>
+    </div>
+    <div class="card">
+      <div class="cfg2-head"><div class="cfg2-icon">💰</div><div><div class="card-title">Presupuesto del proyecto</div><div class="card-sub">Se guarda en Supabase</div></div></div>
+      <div id="cfg2-budget-editor"></div>
+    </div>
+  </div>`;
+  renderCfgBudget();
+}
+
+function renderCfgBudget(){
+  const el = $("cfg2-budget-editor");
+  if(!el) return;
+  el.innerHTML = `<div class="cfg2-label" style="margin-bottom:8px">Presupuesto referencial (CLP)</div>
+    <div style="display:flex;gap:8px">
+      <input type="text" id="cfg2-budget-input" class="filter-select" style="flex:1;height:38px" value="${PROJECT_BUDGET.toLocaleString("es-CL")}" placeholder="180.000.000">
+      <button class="filter-btn-apply" id="cfg2-btn-save-budget">Guardar</button>
+    </div>
+    <div style="margin-top:10px;font-size:13px;color:var(--muted)">Actual: <strong>${formatoCLP(PROJECT_BUDGET)}</strong></div>`;
+  $("cfg2-btn-save-budget")?.addEventListener("click", async()=>{
+    const raw = String($("cfg2-budget-input")?.value||"").replace(/\./g,"").replace(",",".");
+    const val = Number(raw);
+    if(!val||val<1000){alert("Ingresa un presupuesto válido.");return;}
+    await saveBudget(val);
+    showToast("✓ Presupuesto actualizado");
+    renderCfgBudget();
+  });
+}
+
+function cfg2AddTag(btn){
+  const nombre = prompt("Nueva categoría:");
+  if(!nombre||!nombre.trim()) return;
+  const tag = document.createElement("span");
+  tag.className = "cfg2-tag";
+  tag.innerHTML = nombre.trim() + `<button class="cfg2-tag-del" onclick="this.closest('.cfg2-tag').remove()">×</button>`;
+  btn.before(tag);
+}
+
+function cfg2SetTheme(btn){
+  btn.closest(".cfg2-theme-group").querySelectorAll(".cfg2-theme-btn").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  const t = btn.textContent;
+  if(t.includes("Oscuro")) document.documentElement.setAttribute("data-theme","dark");
+  else if(t.includes("Sistema")) document.documentElement.setAttribute("data-theme", window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");
+  else document.documentElement.removeAttribute("data-theme");
+}
+
+function cfg2SetColor(btn, color, soft){
+  btn.closest(".cfg2-colors").querySelectorAll(".cfg2-color").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  document.documentElement.style.setProperty("--green", color);
+  document.documentElement.style.setProperty("--green-soft", soft);
+}
+
+function showToast(msg){
+  document.querySelectorAll(".junqo-toast").forEach(t=>t.remove());
+  const t = document.createElement("div");
+  t.className = "junqo-toast"; t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(()=>t.classList.add("junqo-toast-show"));
+  setTimeout(()=>{t.classList.remove("junqo-toast-show");setTimeout(()=>t.remove(),300);},2800);
+}
+
 function initDashboard(){setupNavigation();setupFileUpload();setupButtons();updateVisibleSections(views.resumen.visible);loadData();}
 document.addEventListener("DOMContentLoaded",initDashboard);
 
@@ -647,4 +1080,9 @@ document.addEventListener("DOMContentLoaded",initDashboard);
 window.openEditModal   = openEditModal;
 window.closeEditModal  = closeEditModal;
 window.confirmDelete   = confirmDelete;
+window.setVentasTab    = setVentasTab;
+window.showToast       = showToast;
+window.cfg2AddTag      = cfg2AddTag;
+window.cfg2SetTheme    = cfg2SetTheme;
+window.cfg2SetColor    = cfg2SetColor;
 window.toggleRowSelect = toggleRowSelect;
