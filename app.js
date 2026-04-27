@@ -422,3 +422,224 @@ window.confirmDelete = confirmDelete;
 window.exportToPDF = exportToPDF;
 window.exportToExcel = exportToExcel;
 window.toggleDetalle = toggleDetalle;
+
+
+
+/* ============================================================
+   FIX FINAL — Botón Ver detalle + descarga Balance desde Reportes
+   Pegar completo al FINAL de app.js
+   No requiere archivo extra.
+   ============================================================ */
+
+(function(){
+  "use strict";
+
+  function q(id){ return document.getElementById(id); }
+
+  function cleanText(v){
+    return String(v || "")
+      .replace(/\u00a0/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function csvEscape(value){
+    const v = cleanText(value).replace(/\r?\n/g, " ");
+    return `"${v.replace(/"/g, '""')}"`;
+  }
+
+  function downloadBlob(filename, content, mime){
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function extraerBalanceReal(){
+    const balance = q("balance-table");
+    if(!balance) return [];
+
+    const filas = [];
+    const rows = balance.querySelectorAll(".table-head, .table-row, tr");
+
+    rows.forEach(row => {
+      const cells = Array.from(row.querySelectorAll("div, th, td"))
+        .map(c => cleanText(c.innerText || c.textContent))
+        .filter(Boolean);
+
+      if(cells.length) filas.push(cells);
+    });
+
+    if(filas.length) return filas;
+
+    const raw = String(balance.innerText || balance.textContent || "")
+      .split(/\n+/)
+      .map(cleanText)
+      .filter(Boolean);
+
+    return raw.map(linea => [linea]);
+  }
+
+  function rowsToCSV(rows){
+    return rows.map(row => row.map(csvEscape).join(";")).join("\n");
+  }
+
+  function exportarBalanceCSVDesdeReportes(){
+    const balanceRows = extraerBalanceReal();
+
+    const rows = [
+      ["Balance General — Proyecto Casa Junquillar"],
+      ["Fuente", "Módulo Balance"],
+      ["Fecha de exportación", new Date().toLocaleString("es-CL")],
+      []
+    ];
+
+    if(balanceRows.length){
+      rows.push(...balanceRows);
+    } else {
+      rows.push(["Sin datos visibles en el módulo Balance"]);
+    }
+
+    downloadBlob(
+      `balance-general-casa-junquillar-${new Date().toISOString().slice(0,10)}.csv`,
+      rowsToCSV(rows),
+      "text/csv;charset=utf-8"
+    );
+  }
+
+  function exportarBalanceExcelDesdeReportes(){
+    const balanceRows = extraerBalanceReal();
+
+    if(window.XLSX){
+      const wb = window.XLSX.utils.book_new();
+      const ws = window.XLSX.utils.aoa_to_sheet(
+        balanceRows.length
+          ? [
+              ["Balance General — Proyecto Casa Junquillar"],
+              ["Fuente", "Módulo Balance"],
+              ["Fecha de exportación", new Date().toLocaleString("es-CL")],
+              [],
+              ...balanceRows
+            ]
+          : [
+              ["Balance General — Proyecto Casa Junquillar"],
+              ["Sin datos visibles en el módulo Balance"]
+            ]
+      );
+
+      window.XLSX.utils.book_append_sheet(wb, ws, "Balance");
+      window.XLSX.writeFile(
+        wb,
+        `balance-general-casa-junquillar-${new Date().toISOString().slice(0,10)}.xlsx`
+      );
+      return;
+    }
+
+    exportarBalanceCSVDesdeReportes();
+  }
+
+  function asegurarBotonesBalance(){
+    const cont = q("reportes-export");
+    if(!cont) return;
+
+    if(q("btn-balance-real-excel") || q("btn-balance-real-csv")) return;
+
+    const wrap = document.createElement("div");
+    wrap.className = "export-btns";
+    wrap.style.marginTop = "12px";
+    wrap.style.flexWrap = "wrap";
+
+    wrap.innerHTML = `
+      <button class="export-btn export-btn-xl" id="btn-balance-real-excel" type="button">⬇ Balance Excel</button>
+      <button class="export-btn" id="btn-balance-real-csv" type="button">⬇ Balance CSV</button>
+    `;
+
+    cont.prepend(wrap);
+
+    q("btn-balance-real-excel")?.addEventListener("click", function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      exportarBalanceExcelDesdeReportes();
+    });
+
+    q("btn-balance-real-csv")?.addEventListener("click", function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      exportarBalanceCSVDesdeReportes();
+    });
+  }
+
+  function toggleDetalleSeguro(){
+    const extras = q("report-extras");
+
+    if(!extras){
+      alert("No se encontró el bloque de detalle de reportes.");
+      return;
+    }
+
+    const actual = window.getComputedStyle(extras).display;
+    const abrir = extras.style.display === "none" || actual === "none";
+
+    extras.style.display = abrir ? "block" : "none";
+
+    const btn = q("btn-ver-detalle");
+    if(btn){
+      btn.textContent = abrir ? "👁️ Ocultar detalle" : "👁️ Ver detalle";
+    }
+
+    if(abrir){
+      asegurarBotonesBalance();
+      extras.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function conectarBotonDetalle(){
+    const btn = q("btn-ver-detalle");
+    if(!btn) return;
+
+    btn.removeAttribute("onclick");
+    btn.onclick = null;
+
+    if(btn.dataset.fixDetalleReportes === "1") return;
+
+    btn.dataset.fixDetalleReportes = "1";
+    btn.addEventListener("click", function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      toggleDetalleSeguro();
+    });
+  }
+
+  function bootDetalleReportes(){
+    window.toggleDetalle = toggleDetalleSeguro;
+    window.exportarBalanceCSVDesdeReportes = exportarBalanceCSVDesdeReportes;
+    window.exportarBalanceExcelDesdeReportes = exportarBalanceExcelDesdeReportes;
+
+    conectarBotonDetalle();
+
+    let intentos = 0;
+    const timer = setInterval(function(){
+      conectarBotonDetalle();
+      if(q("report-extras")) asegurarBotonesBalance();
+      intentos++;
+      if(intentos > 20) clearInterval(timer);
+    }, 500);
+
+    const observer = new MutationObserver(function(){
+      conectarBotonDetalle();
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bootDetalleReportes);
+  } else {
+    bootDetalleReportes();
+  }
+})();
