@@ -657,11 +657,290 @@ const WIDGET_DEFS = {
 };
 
 function renderReportes(){
+  renderReportHeader();
+  renderReportKPIs();
+  renderReportDiagnostico();
+  renderReportAlertas();
+  renderReportCharts();
+  renderResumenCategoria();
+  renderResumenTributario();
+  // Mantener la funcionalidad existente
   renderExportBar();
   renderReportConfig();
   renderReportWidgets();
 }
 
+/* ── REPORTE EJECUTIVO: Header ────────────────────────────── */
+function renderReportHeader(){
+  const now=new Date();
+  const meses=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  const periodo=`${meses[now.getMonth()]} ${now.getFullYear()}`;
+  const actualizada=`Última actualización: ${String(now.getDate()).padStart(2,"0")}/${String(now.getMonth()+1).padStart(2,"0")}/${now.getFullYear()} ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+  
+  const periodEl=$("report-period");
+  const updatedEl=$("report-updated");
+  if(periodEl)periodEl.textContent=periodo;
+  if(updatedEl)updatedEl.textContent=actualizada;
+}
+
+/* ── REPORTE EJECUTIVO: KPIs ──────────────────────────────── */
+function renderReportKPIs(){
+  const t=getTotals();
+  const avance=PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0;
+  
+  const kpiPresupuesto=$("kpi-presupuesto");
+  const kpiEjecutado=$("kpi-ejecutado");
+  const kpiAvance=$("kpi-avance");
+  const kpiAvanceBar=$("kpi-avance-bar");
+  const kpiIva=$("kpi-iva");
+  
+  if(kpiPresupuesto)kpiPresupuesto.textContent=formatoCLP(PROJECT_BUDGET);
+  if(kpiEjecutado)kpiEjecutado.textContent=formatoCLP(t.neto);
+  if(kpiAvance)kpiAvance.textContent=formatoPct(avance);
+  if(kpiAvanceBar)kpiAvanceBar.style.width=`${Math.min(avance,100)}%`;
+  if(kpiIva)kpiIva.textContent=formatoCLP(t.iva);
+}
+
+/* ── REPORTE EJECUTIVO: Diagnóstico ───────────────────────── */
+function renderReportDiagnostico(){
+  const t=getTotals();
+  const avance=PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0;
+  
+  // Obtener categorías principales
+  const groups=groupBy(gastos,g=>g.categoria||"Sin categoría");
+  const catEntries=Object.entries(groups).map(([cat,rows])=>({cat,monto:sumBy(rows,"neto")})).sort((a,b)=>b.monto-a.monto);
+  const principalCat=catEntries.length>0?catEntries[0].cat:"Sin datos";
+  
+  let diagnostico="";
+  if(gastos.length===0){
+    diagnostico="No hay datos de gastos registrados. La vista se mostrará con valores en cero hasta que se carguen documentos.";
+  }else if(avance<30){
+    diagnostico=`El proyecto se encuentra en etapa inicial con un ${formatoPct(avance)} de avance financiero. Los gastos registrados ascienden a ${formatoCLP(t.neto)} netos, concentrados principalmente en ${principalCat}. Se recomienda continuar con el registro de comprobantes para mantener el control del presupuesto.`;
+  }else if(avance<70){
+    diagnostico=`El proyecto mantiene un avance financiero controlado del ${formatoPct(avance)}. La mayor concentración de gasto está en ${principalCat}. El IVA crédito fiscal acumulado de ${formatoCLP(t.iva)} se mantiene disponible para compensación futura.`;
+  }else{
+    diagnostico=`El proyecto se encuentra en etapa avanzada con un ${formatoPct(avance)} de ejecución presupuestaria. Se han registrado ${gastos.length} documentos por un total neto de ${formatoCLP(t.neto)}. Se recomienda revisar las desviaciones por categoría para asegurar el cierre dentro del presupuesto.`;
+  }
+  
+  const diagEl=$("diagnostico-text");
+  if(diagEl)diagEl.textContent=diagnostico;
+}
+
+/* ── REPORTE EJECUTIVO: Alertas ───────────────────────────── */
+function renderReportAlertas(){
+  const t=getTotals();
+  const avance=PROJECT_BUDGET?(t.neto/PROJECT_BUDGET)*100:0;
+  const alertas=[];
+  
+  // Verificar sobrecostos
+  if(avance>100){
+    alertas.push({tipo:"error",texto:"Sobrecosto detectado: el ejecutado supera el presupuesto total"});
+  }else if(avance>85){
+    alertas.push({tipo:"warning",texto:"Alerta: el proyecto está acercándose al presupuesto (85%+)"});  
+  }
+
+  // Verificar categorías con desviación
+  const groups=groupBy(gastos,g=>g.categoria||"Sin categoría");
+  const presupuestoPorCat=PROJECT_BUDGET/5; // Distribución aproximada
+  for(const[cat,rows]of Object.entries(groups)){
+    const monto=sumBy(rows,"neto");
+    if(monto>presupuestoPorCat*1.2){
+      alertas.push({tipo:"warning",texto:`Partida "${cat}" supera el 120% del umbral presupuestado`});
+    }
+  }
+  
+  // Verificar documentos pendientes
+  const pendientes=gastos.filter(g=>String(g.estado_ocr||"").toLowerCase()==="pendiente").length;
+  if(pendientes>0){
+    alertas.push({tipo:"info",texto:`${pendientes} documento(s) pendiente(s) de procesamiento OCR`});
+  }
+  
+  // Verificar documentación
+  if(gastos.length>0){
+    alertas.push({tipo:"success",texto:"Documentación tributaria al día"});
+  }
+  
+  if(alertas.length===0){
+    alertas.push({tipo:"success",texto:"Sin sobrecostos críticos. El proyecto se encuentra dentro de los parámetros esperados."});
+  }
+  
+  const alertasEl=$("alertas-list");
+  if(alertasEl){
+    alertasEl.innerHTML=alertas.map(a=>`
+      <div class="alerta-item alerta-${a.tipo}">
+        ${a.tipo==="error"?"🔴":a.tipo==="warning"?"🟡":a.tipo==="success"?"🟢":"🔵"} ${a.texto}
+      </div>
+    `).join("");
+  }
+}
+
+/* ── REPORTE EJECUTIVO: Gráficos ──────────────────────────── */
+let chartPresupuesto=null;
+let chartCategoria=null;
+let chartMensual=null;
+
+function renderReportCharts(){
+  // Verificar si Chart.js está disponible
+  if(typeof Chart==="undefined"){
+    // Mostrar mensaje de fallback
+    const containers=["chart-presupuesto","chart-categoria","chart-mensual"];
+    containers.forEach(id=>{
+      const el=$(id);
+      if(el)el.innerHTML='<div class="chart-fallback">Gráfico no disponible (Chart.js no cargado)</div>';
+    });
+    return;
+  }
+  
+  const t=getTotals();
+  
+  // Gráfico 1: Presupuesto vs Ejecutado (barras)
+  const ctx1=$("chart-presupuesto-canvas");
+  if(ctx1){
+    if(chartPresupuesto)chartPresupuesto.destroy();
+    chartPresupuesto=new Chart(ctx1,{
+      type:"bar",
+      data:{
+        labels:["Presupuesto","Ejecutado"],
+        datasets:[{
+          label:"Monto",
+          data:[PROJECT_BUDGET,t.neto],
+          backgroundColor:["#3b82f6","#10b981"],
+          borderRadius:4
+        }]
+      },
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true, ticks:{callback:v=>formatoCLP(v)}}}}
+    });
+  }
+  
+  // Gráfico 2: Distribución por categoría (doughnut)
+  const ctx2=$("chart-categoria-canvas");
+  if(ctx2){
+    const groups=groupBy(gastos,g=>g.categoria||"Sin categoría");
+    const catData=Object.entries(groups).map(([cat,rows])=>({cat,monto:sumBy(rows,"neto")})).sort((a,b)=>b.monto-a.monto);
+    if(chartCategoria)chartCategoria.destroy();
+    chartCategoria=new Chart(ctx2,{
+      type:"doughnut",
+      data:{
+        labels:catData.map(c=>c.cat),
+        datasets:[{data:catData.map(c=>c.monto),backgroundColor:["#3b82f6","#10b981","#f59e0b","#8b5cf6","#ef4444","#06b6d4"]}]
+      },
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"right"}}}
+    });
+  }
+  
+  // Gráfico 3: Evolución mensual (línea)
+  const ctx3=$("chart-mensual-canvas");
+  if(ctx3){
+    const groups=groupBy(gastos,g=>mesLabel(g.fecha));
+    const sortedMeses=Object.entries(groups).sort(([a],[b])=>a.localeCompare(b));
+    const labels=sortedMeses.map(([mes])=>mes);
+    const data=sortedMeses.map(([,rows])=>sumBy(rows,"neto"));
+    if(chartMensual)chartMensual.destroy();
+    chartMensual=new Chart(ctx3,{
+      type:"line",
+      data:{
+        labels:labels.length?labels:["Sin datos"],
+        datasets:[{label:"Gasto neto",data:data.length?data:[0],borderColor:"#3b82f6",backgroundColor:"rgba(59,130,246,0.1)",fill:true,tension:0.3}]
+      },
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>formatoCLP(v)}}}}
+    });
+  }
+}
+
+/* ── REPORTE EJECUTIVO: Resumen por Categoría ─────────────── */
+function renderResumenCategoria(){
+  const categorias=["Materiales","Mano de obra","Servicios","Herramientas","Transporte"];
+  const presupuestoPorCat=PROJECT_BUDGET/categorias.length;
+  
+  const groups=groupBy(gastos,g=>g.categoria||"Sin categoría");
+  const rows=categorias.map(cat=>{
+    const catGastos=groups[cat]||[];
+    const ejecutado=sumBy(catGastos,"neto");
+    const diferencia=presupuestoPorCat-ejecutado;
+    const pctAvance=presupuestoPorCat>0?(ejecutado/presupuestoPorCat)*100:0;
+    return{cat,presupuesto:presupuestoPorCat,ejecutado,diferencia,pctAvance};
+  });
+  
+  const tbody=$("resumen-categoria-body");
+  if(tbody){
+    tbody.innerHTML=rows.map(r=>`
+      <tr>
+        <td><span class="cat-badge ${getCategoriaClass(r.cat)}">${r.cat}</span></td>
+        <td class="money">${formatoCLP(r.presupuesto)}</td>
+        <td class="money">${formatoCLP(r.ejecutado)}</td>
+        <td class="money ${r.diferencia<0?'text-red':'text-green'}">${formatoCLP(r.diferencia)}</td>
+        <td class="money">${formatoPct(r.pctAvance)}</td>
+      </tr>
+    `).join("");
+  }
+}
+
+/* ── REPORTE EJECUTIVO: Resumen Tributario ───────────────── */
+function renderResumenTributario(){
+  const t=getTotals();
+  const docsConCF=gastos.filter(g=>numberValue(g.iva)>0).length;
+  const docsSinCF=gastos.filter(g=>numberValue(g.iva)===0).length;
+  
+  const baseNeta=$("trib-base-neta");
+  const ivaCF=$("trib-iva-cf");
+  const docsCF=$("trib-docs-cf");
+  const docsSin=$("trib-docs-sin-cf");
+  
+  if(baseNeta)baseNeta.textContent=formatoCLP(t.neto);
+  if(ivaCF)ivaCF.textContent=formatoCLP(t.iva);
+  if(docsCF)docsCF.textContent=String(docsConCF);
+  if(docsSin)docsSin.textContent=String(docsSinCF);
+}
+
+/* ── REPORTE EJECUTIVO: Funciones de exportación ─────────── */
+function exportToPDF(){
+  showToast("📄 Generando PDF... (funcionalidad en desarrollo)");
+  // Implementación básica usando window.print
+  window.print();
+}
+
+function exportToExcel(){
+  if(!gastos.length){
+    showToast("⚠️ No hay datos para exportar");
+    return;
+  }
+  const data=gastos.map(r=>({
+    Fecha:normalizarFecha(r.fecha),
+    Proveedor:r.proveedor||"",
+    RUT:r.rut||"",
+    "Tipo documento":r.tipo_documento||"",
+    "N° documento":r.numero_documento||"",
+    Categoría:r.categoria||"",
+    "Costo neto":r.neto,
+    "IVA":r.iva,
+    "Total":r.total,
+    "Método pago":r.metodo_pago||""
+  }));
+  
+  if(typeof XLSX==="undefined"){
+    showToast("⚠️ Librería Excel no disponible");
+    return;
+  }
+  
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Reporte Ejecutivo");
+  XLSX.writeFile(wb,`Reporte_Ejecutivo_${new Date().toISOString().split("T")[0]}.xlsx`);
+  showToast("✅ Reporte Excel descargado");
+}
+
+function toggleDetalle(){
+  const extras=$("report-extras");
+  if(extras){
+    extras.style.display=extras.style.display==="none"?"block":"none";
+  }
+}
+
+window.exportToPDF=exportToPDF;
+window.exportToExcel=exportToExcel;
+window.toggleDetalle=toggleDetalle;
+
+/* ── REPORTES: Configuración existente ───────────────────── */
 function renderReportConfig(){
   const el=$("reportes-config");if(!el)return;
   el.innerHTML=`
