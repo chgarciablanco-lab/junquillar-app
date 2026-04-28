@@ -4,7 +4,7 @@ let PROJECT_BUDGET = 180000000;
 const PROJECT_NAME = "Junquillar";
 const BUCKET_NAME = "comprobantes-junquillar";
 const MAX_FILE_SIZE_MB = 10;
-const ALLOWED_FILE_EXTENSIONS = ["jpg","jpeg","png","pdf","xls","xlsx","csv"];
+const ALLOWED_FILE_EXTENSIONS = ["jpg","jpeg","png","webp","heic","heif","pdf","xls","xlsx","csv"];
 const REPORT_WIDGETS_KEY = "junqo_report_widgets";
 
 let gastos = [];
@@ -95,7 +95,7 @@ async function handleFileUpload(event){
     for(let i=0;i<rows.length;i+=50){const b=rows.slice(i,i+50);const{error}=await window.supabaseClient.from("gastos_junquillar_app").insert(b);if(error){alert(`Insertados ${ins}, luego error: ${error.message}`);event.target.value="";await loadData();return;}ins+=b.length;}
     alert(`✅ ${ins} registros importados.`);event.target.value="";await loadData();return;
   }
-  const isImage=["jpg","jpeg","png"].includes(ext);
+  const isImage = (file.type && file.type.startsWith("image/")) || ["jpg", "jpeg", "png", "webp", "heic", "heif"].includes(ext);
   const{data:inserted,error:ie}=await window.supabaseClient
     .from("gastos_junquillar_app")
     .insert({fecha:new Date().toISOString().slice(0,10),proyecto:PROJECT_NAME,observacion:`Archivo: ${file.name}`,estado_ocr:isImage?"procesando":"pendiente",foto_path:stored})
