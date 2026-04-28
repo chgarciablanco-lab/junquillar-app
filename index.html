@@ -12,14 +12,14 @@
     <div class="sidebar-logo"><div class="wordmark">Junqo.</div></div>
     <nav class="sidebar-nav">
       <button class="nav-btn active" data-view="resumen">Resumen</button>
+      <button class="nav-btn" data-view="ventas">Ventas</button>
       <button class="nav-btn" data-view="gastos">Gastos</button>
       <button class="nav-btn" data-view="documentos">Documentos</button>
       <button class="nav-btn" data-view="proveedores">Proveedores</button>
-      <button class="nav-btn" data-view="caja">Caja e IVA</button>
-      <button class="nav-btn" data-view="balance">Balance</button>
-      <button class="nav-btn" data-view="reportes">Reportes</button>
-      <button class="nav-btn" data-view="ventas">Ventas</button>
       <button class="nav-btn" data-view="insumos">Insumos</button>
+      <button class="nav-btn" data-view="caja">Caja e IVA</button>
+      <button class="nav-btn" data-view="control-financiero">Control Financiero</button>
+      <button class="nav-btn" data-view="reportes">Reportes</button>
       <button class="nav-btn" data-view="configuracion">Configuración</button>
     </nav>
     <div class="sidebar-card">
@@ -81,6 +81,20 @@
           <div class="upload-btns">
             <button class="upload-btn-primary" id="btn-adjuntar">📎 &nbsp;Adjuntar archivo</button>
             <button class="upload-btn-secondary" id="btn-foto">📷 &nbsp;Sacar foto</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header-row">
+            <div>
+              <div class="card-title">📁 Archivos subidos recientemente</div>
+              <div class="card-sub">Registro de documentos cargados a la aplicación</div>
+            </div>
+          </div>
+          <div class="table-wrap" style="overflow-x:auto;margin-top:12px">
+            <div class="table-head doc-log-head">
+              <div>Tipo</div><div>Nombre</div><div>Formato</div><div>Fecha</div><div>Proveedor</div><div>Ver</div>
+            </div>
+            <div id="documento-log"></div>
           </div>
         </div>
       </section>
@@ -210,6 +224,7 @@
       <!-- ── CAJA e IVA ── -->
       <section class="module-block module-hidden" id="section-caja">
         <div class="kpi-grid" id="caja-kpis" style="margin-bottom:20px"></div>
+        <div id="caja-control"></div>
         <div class="card">
           <div class="card-title">Clasificación por Tipo de Documento</div>
           <div class="card-sub">Calculado desde documentos registrados</div>
@@ -233,13 +248,9 @@
         </div>
       </section>
 
-      <!-- ── BALANCE ── -->
-      <section class="module-block module-hidden" id="section-balance">
-        <div class="card">
-          <div class="card-title">Balance General — Proyecto Casa Junquillar</div>
-          <div class="card-sub">Balance calculado desde gastos registrados en Supabase</div>
-          <div class="table-wrap"><div id="balance-table"></div></div>
-        </div>
+      <!-- ── CONTROL FINANCIERO ── -->
+      <section class="module-block module-hidden" id="section-control-financiero">
+        <div id="cf-root"></div>
       </section>
 
       <!-- ── REPORTES ── -->
@@ -459,6 +470,188 @@
     <div class="modal-footer">
       <button class="modal-btn-cancel" id="btn-modal-cancel2" onclick="closeEditModal()">Cancelar</button>
       <button class="modal-btn-save" id="btn-modal-save">💾 Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL ABRIR CAJA ── -->
+<div id="modal-abrir-caja" class="modal-overlay modal-hidden" onclick="if(event.target===this)closeModalAbrirCaja()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">🔓 Abrir Caja</span>
+      <button class="modal-close" onclick="closeModalAbrirCaja()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-grid">
+        <div class="modal-field"><label>Fecha de apertura</label><input type="date" id="ac-fecha"/></div>
+        <div class="modal-field"><label>Hora de apertura</label><input type="time" id="ac-hora"/></div>
+        <div class="modal-field"><label>Saldo inicial en caja ($)</label><input type="number" id="ac-saldo" placeholder="0" min="0"/></div>
+        <div class="modal-field"><label>Responsable</label><input type="text" id="ac-responsable" placeholder="Nombre del responsable"/></div>
+        <div class="modal-field modal-field-full"><label>Observación</label><input type="text" id="ac-obs" placeholder="Notas de apertura (opcional)"/></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn-cancel" onclick="closeModalAbrirCaja()">Cancelar</button>
+      <button class="modal-btn-save" onclick="guardarAperturaCaja()">🔓 Confirmar apertura</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL CERRAR CAJA ── -->
+<div id="modal-cerrar-caja" class="modal-overlay modal-hidden" onclick="if(event.target===this)closeModalCerrarCaja()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">🔒 Cerrar Caja</span>
+      <button class="modal-close" onclick="closeModalCerrarCaja()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-grid">
+        <div class="modal-field"><label>Fecha de cierre</label><input type="date" id="cc-fecha"/></div>
+        <div class="modal-field"><label>Hora de cierre</label><input type="time" id="cc-hora"/></div>
+        <div class="modal-field"><label>Saldo esperado (calculado)</label><input type="text" id="cc-saldo-esperado" readonly style="background:#f8fafc;color:var(--muted)"/></div>
+        <div class="modal-field"><label>Saldo contado en caja ($)</label><input type="number" id="cc-saldo" placeholder="0" min="0"/></div>
+        <div class="modal-field modal-field-full"><label>Observación de cierre</label><input type="text" id="cc-obs" placeholder="Notas o diferencias detectadas (opcional)"/></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn-cancel" onclick="closeModalCerrarCaja()">Cancelar</button>
+      <button class="modal-btn-save" style="background:var(--red)" onclick="guardarCierreCaja()">🔒 Confirmar cierre</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL NUEVO/EDITAR INGRESO ── -->
+<div id="modal-ingreso" class="modal-overlay modal-hidden" onclick="if(event.target===this)closeModalIngreso()">
+  <div class="modal-box modal-box-lg" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-ingreso-title">✏️ Nuevo Ingreso</span>
+      <button class="modal-close" onclick="closeModalIngreso()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-section-label">Información principal</div>
+      <div class="modal-grid">
+        <div class="modal-field"><label>Fecha de recepción</label><input type="date" id="ing-fecha"/></div>
+        <div class="modal-field"><label>Tipo de pago</label>
+          <select id="ing-tipo">
+            <option>Transferencia</option><option>Cheque</option><option>Efectivo</option>
+            <option>Depósito</option><option>Vale vista</option>
+          </select>
+        </div>
+        <div class="modal-field"><label>Tipo contable</label>
+          <select id="ing-categoria">
+            <option value="Aporte">Aporte</option>
+            <option value="Anticipo">Anticipo</option>
+            <option value="Venta propiedad">Venta propiedad</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div class="modal-field modal-field-full"><label>Concepto / Descripción</label><input type="text" id="ing-concepto" placeholder="Ej: Anticipo Etapa 2 — Estructura"/></div>
+        <div class="modal-field"><label>Monto ($)</label><input type="number" id="ing-monto" placeholder="0" min="0"/></div>
+        <div class="modal-field"><label>Estado</label>
+          <select id="ing-estado">
+            <option>Recibido</option><option>Pendiente</option><option>Anulado</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-section-label" style="margin-top:14px">Datos de la transacción</div>
+      <div class="modal-grid">
+        <div class="modal-field"><label>N° Comprobante / Referencia</label><input type="text" id="ing-referencia" placeholder="Ej: TRF-00123"/></div>
+        <div class="modal-field"><label>Banco / Institución</label><input type="text" id="ing-banco" placeholder="Ej: Banco Estado"/></div>
+        <div class="modal-field"><label>Cuenta de destino</label><input type="text" id="ing-cuenta" placeholder="Ej: Cta. Cte. 00123456"/></div>
+        <div class="modal-field"><label>Emitido por</label><input type="text" id="ing-emisor" placeholder="Nombre de quien transfiere"/></div>
+        <div class="modal-field modal-field-full"><label>Observación</label><input type="text" id="ing-obs" placeholder="Notas adicionales sobre el ingreso"/></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn-cancel" onclick="closeModalIngreso()">Cancelar</button>
+      <button class="modal-btn-save" onclick="saveIngreso()">💾 Guardar ingreso</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL NUEVO/EDITAR COTIZACIÓN ── -->
+<div id="modal-cotizacion" class="modal-overlay modal-hidden" onclick="if(event.target===this)closeModalCotizacion()">
+  <div class="modal-box modal-box-lg" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-cot-title">✏️ Nueva Cotización</span>
+      <button class="modal-close" onclick="closeModalCotizacion()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-section-label">Datos del proveedor</div>
+      <div class="modal-grid">
+        <div class="modal-field"><label>Proveedor / Contratista</label><input type="text" id="cot-proveedor" placeholder="Razón social o nombre"/></div>
+        <div class="modal-field"><label>RUT proveedor</label><input type="text" id="cot-rut" placeholder="12.345.678-9"/></div>
+        <div class="modal-field"><label>Teléfono de contacto</label><input type="text" id="cot-telefono" placeholder="+56 9 1234 5678"/></div>
+        <div class="modal-field"><label>Correo proveedor</label><input type="email" id="cot-correo" placeholder="correo@proveedor.cl"/></div>
+      </div>
+      <div class="modal-section-label" style="margin-top:14px">Detalle de la cotización</div>
+      <div class="modal-grid">
+        <div class="modal-field"><label>N° Cotización</label><input type="text" id="cot-numero" placeholder="Ej: COT-2024-001"/></div>
+        <div class="modal-field"><label>Fecha de cotización</label><input type="date" id="cot-fecha"/></div>
+        <div class="modal-field"><label>Fecha de vigencia</label><input type="date" id="cot-vigencia"/></div>
+        <div class="modal-field"><label>Partida / Categoría</label>
+          <select id="cot-categoria">
+            <option value="">Sin categoría</option>
+            <option>Materiales</option><option>Mano de obra</option>
+            <option>Servicios</option><option>Herramientas</option><option>Transporte</option>
+          </select>
+        </div>
+        <div class="modal-field modal-field-full"><label>Descripción del trabajo</label><input type="text" id="cot-descripcion" placeholder="Detalle completo del trabajo cotizado"/></div>
+      </div>
+      <div class="modal-section-label" style="margin-top:14px">Montos y estado</div>
+      <div class="modal-grid">
+        <div class="modal-field"><label>Neto ($)</label><input type="number" id="cot-neto" placeholder="0" min="0" oninput="calcCotIva()"/></div>
+        <div class="modal-field"><label>IVA ($) <span style="font-size:10px;color:var(--muted);font-weight:400">19% auto</span></label><input type="number" id="cot-iva" placeholder="0" min="0" oninput="calcCotTotal()"/></div>
+        <div class="modal-field"><label>Total ($)</label><input type="number" id="cot-total" placeholder="0" min="0"/></div>
+        <div class="modal-field"><label>Estado</label>
+          <select id="cot-estado">
+            <option>Pendiente</option><option>Aprobada</option><option>Rechazada</option><option>En revisión</option>
+          </select>
+        </div>
+        <div class="modal-field modal-field-full"><label>Observación</label><input type="text" id="cot-obs" placeholder="Condiciones, garantías, plazos u otras notas"/></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn-cancel" onclick="closeModalCotizacion()">Cancelar</button>
+      <button class="modal-btn-save" onclick="saveCotizacion()">💾 Guardar cotización</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL NUEVO/EDITAR CONTACTO ── -->
+<div id="modal-contacto" class="modal-overlay modal-hidden" onclick="if(event.target===this)closeModalContacto()">
+  <div class="modal-box modal-box-lg" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-cont-title">✏️ Nuevo Contacto</span>
+      <button class="modal-close" onclick="closeModalContacto()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-section-label">Identificación</div>
+      <div class="modal-grid">
+        <div class="modal-field"><label>Nombre completo</label><input type="text" id="cont-nombre" placeholder="Nombre y apellido"/></div>
+        <div class="modal-field"><label>RUT</label><input type="text" id="cont-rut" placeholder="12.345.678-9"/></div>
+        <div class="modal-field"><label>Empresa / Organización</label><input type="text" id="cont-empresa" placeholder="Nombre de la empresa (si aplica)"/></div>
+        <div class="modal-field"><label>Rol en el proyecto</label><input type="text" id="cont-rol" placeholder="Ej: Arquitecto, Contratista, Inspector…"/></div>
+        <div class="modal-field"><label>Especialidad</label><input type="text" id="cont-especialidad" placeholder="Ej: Obras civiles, Electricidad…"/></div>
+        <div class="modal-field"><label>Estado</label>
+          <select id="cont-estado">
+            <option>Activo</option><option>Inactivo</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-section-label" style="margin-top:14px">Datos de contacto</div>
+      <div class="modal-grid">
+        <div class="modal-field"><label>Teléfono principal</label><input type="text" id="cont-telefono" placeholder="+56 9 1234 5678"/></div>
+        <div class="modal-field"><label>Teléfono secundario</label><input type="text" id="cont-telefono2" placeholder="+56 2 2345 6789"/></div>
+        <div class="modal-field"><label>Correo electrónico</label><input type="email" id="cont-correo" placeholder="correo@ejemplo.cl"/></div>
+        <div class="modal-field"><label>Correo alternativo</label><input type="email" id="cont-correo2" placeholder="correo2@ejemplo.cl"/></div>
+        <div class="modal-field modal-field-full"><label>Dirección</label><input type="text" id="cont-direccion" placeholder="Calle, N°, comuna, ciudad"/></div>
+        <div class="modal-field modal-field-full"><label>Observación</label><input type="text" id="cont-obs" placeholder="Notas relevantes sobre este contacto"/></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn-cancel" onclick="closeModalContacto()">Cancelar</button>
+      <button class="modal-btn-save" onclick="saveContacto()">💾 Guardar contacto</button>
     </div>
   </div>
 </div>
