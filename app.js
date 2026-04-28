@@ -16,6 +16,11 @@ let editModalGasto = null;
 const DEFAULT_WIDGETS = ["cat","mensual","proveedores","iva","avance","documentos"];
 let activeWidgets = JSON.parse(localStorage.getItem(REPORT_WIDGETS_KEY) || JSON.stringify(DEFAULT_WIDGETS));
 
+/* ── AUTH / LOGIN ─────────────────────────────────────────── */
+let authSession = null;
+let authUser = null;
+let dashboardStarted = false;
+
 const views = {
   resumen:     { title:"Resumen",            subtitle:"Vista ejecutiva y control del proyecto",               visible:["section-kpis","section-alerts","section-control"] },
   gastos:      { title:"Gastos",             subtitle:"Registro y control de egresos del proyecto",          visible:["section-filtro-solo","section-docs"] },
@@ -2321,8 +2326,152 @@ function showToast(msg){
   setTimeout(()=>{t.classList.remove("junqo-toast-show");setTimeout(()=>t.remove(),300);},2800);
 }
 
+function showAuthError(message){
+  const el = $("auth-error");
+  if(!el) return;
+  el.textContent = message || "No se pudo iniciar sesión.";
+  el.style.display = "block";
+}
+
+function setAuthLoading(isLoading){
+  const btn = $("auth-submit");
+  if(!btn) return;
+  btn.disabled = !!isLoading;
+  btn.textContent = isLoading ? "Ingresando..." : "Ingresar";
+}
+
+function renderLoginScreen(){
+  document.body.classList.add("auth-locked");
+  document.querySelector(".layout")?.classList.add("layout-auth-hidden");
+
+  if($("auth-screen")) return;
+
+  const screen = document.createElement("div");
+  screen.id = "auth-screen";
+  screen.className = "auth-screen";
+  screen.innerHTML = `
+    <div class="auth-card">
+      <div class="auth-brand">Junqo<span>.</span></div>
+      <div class="auth-title">Acceso privado</div>
+      <div class="auth-subtitle">Ingresa con tu usuario autorizado para administrar el proyecto Junquillar.</div>
+
+      <form id="auth-form" class="auth-form">
+        <label class="auth-label" for="auth-email">Correo</label>
+        <input id="auth-email" class="auth-input" type="email" autocomplete="email" placeholder="correo@empresa.cl" required />
+
+        <label class="auth-label" for="auth-password">Contraseña</label>
+        <input id="auth-password" class="auth-input" type="password" autocomplete="current-password" placeholder="Contraseña" required />
+
+        <div id="auth-error" class="auth-error" style="display:none"></div>
+
+        <button id="auth-submit" class="auth-submit" type="submit">Ingresar</button>
+      </form>
+
+      <div class="auth-note">El acceso se valida con Supabase Auth. No compartas tus credenciales.</div>
+    </div>`;
+
+  document.body.appendChild(screen);
+
+  $("auth-form")?.addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const email = String($("auth-email")?.value || "").trim();
+    const password = String($("auth-password")?.value || "");
+    if(!email || !password){showAuthError("Ingresa correo y contraseña.");return;}
+
+    try{
+      setAuthLoading(true);
+      const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
+      if(error) throw error;
+      if(data?.session) startAuthenticatedApp(data.session);
+    }catch(err){
+      showAuthError(err?.message || "No se pudo iniciar sesión.");
+    }finally{
+      setAuthLoading(false);
+    }
+  });
+}
+
+function removeLoginScreen(){
+  document.body.classList.remove("auth-locked");
+  document.querySelector(".layout")?.classList.remove("layout-auth-hidden");
+  $("auth-screen")?.remove();
+}
+
+function updateAuthUserUI(){
+  const email = authUser?.email || "Usuario";
+  const name = authUser?.user_metadata?.name || email;
+  const initials = name.split(/\s|@/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase() || "U";
+
+  const userName = document.querySelector(".sidebar-user-name");
+  const userRole = document.querySelector(".sidebar-user-role");
+  const avatar = document.querySelector(".sidebar-user .avatar");
+  if(userName) userName.textContent = name;
+  if(userRole) userRole.textContent = "Sesión activa";
+  if(avatar) avatar.textContent = initials;
+
+  const headerRight = document.querySelector(".header-right");
+  if(headerRight && !$("btn-logout")){
+    const btn = document.createElement("button");
+    btn.id = "btn-logout";
+    btn.className = "btn-outline btn-logout";
+    btn.type = "button";
+    btn.textContent = "Cerrar sesión";
+    btn.addEventListener("click", logoutJunqo);
+    headerRight.appendChild(btn);
+  }
+}
+
+function startAuthenticatedApp(session){
+  authSession = session;
+  authUser = session?.user || null;
+  removeLoginScreen();
+  updateAuthUserUI();
+
+  if(!dashboardStarted){
+    dashboardStarted = true;
+    initDashboard();
+  }else{
+    loadData();
+  }
+}
+
+async function logoutJunqo(){
+  try{
+    await window.supabaseClient?.auth?.signOut();
+  }catch(_err){}
+  authSession = null;
+  authUser = null;
+  dashboardStarted = false;
+  gastos = [];
+  filteredDocs = [];
+  if(typeof selectedIds !== "undefined" && selectedIds?.clear) selectedIds.clear();
+  renderLoginScreen();
+}
+
+async function initAuth(){
+  if(typeof window.supabaseClient === "undefined" || !window.supabaseClient.auth){
+    alert("Supabase Auth no está disponible. Revisa supabaseClient.js y el orden de carga de scripts.");
+    return;
+  }
+
+  const { data, error } = await window.supabaseClient.auth.getSession();
+  if(error){
+    console.error("Auth session error:", error);
+    renderLoginScreen();
+    return;
+  }
+
+  window.supabaseClient.auth.onAuthStateChange((_event, session)=>{
+    if(session) startAuthenticatedApp(session);
+    else renderLoginScreen();
+  });
+
+  if(data?.session) startAuthenticatedApp(data.session);
+  else renderLoginScreen();
+}
+
 function initDashboard(){setupNavigation();setupFileUpload();setupButtons();updateVisibleSections(views.resumen.visible);loadData();}
-document.addEventListener("DOMContentLoaded",initDashboard);
+document.addEventListener("DOMContentLoaded",initAuth);
 
 /* ── Exponer funciones al scope global (necesario para onclick inline) ── */
 window.openEditModal      = openEditModal;
@@ -2330,6 +2479,7 @@ window.closeEditModal     = closeEditModal;
 window.confirmDelete      = confirmDelete;
 window.setVentasTab       = setVentasTab;
 window.showToast          = showToast;
+window.logoutJunqo        = logoutJunqo;
 window.cfg2AddTag         = cfg2AddTag;
 window.cfg2SetTheme       = cfg2SetTheme;
 window.cfg2SetColor       = cfg2SetColor;
