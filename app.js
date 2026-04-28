@@ -95,64 +95,27 @@ async function handleFileUpload(event){
     for(let i=0;i<rows.length;i+=50){const b=rows.slice(i,i+50);const{error}=await window.supabaseClient.from("gastos_junquillar_app").insert(b);if(error){alert(`Insertados ${ins}, luego error: ${error.message}`);event.target.value="";await loadData();return;}ins+=b.length;}
     alert(`✅ ${ins} registros importados.`);event.target.value="";await loadData();return;
   }
-  const isImage = ["jpg", "jpeg", "png"].includes(ext);
-
-const { data: inserted, error: ie } = await window.supabaseClient
-  .from("gastos_junquillar_app")
-  .insert({
-    fecha: new Date().toISOString().slice(0, 10),
-    proyecto: PROJECT_NAME,
-    observacion: `Archivo: ${file.name}`,
-    estado_ocr: isImage ? "procesando" : "pendiente",
-    foto_path: stored
-  })
-  .select("id")
-  .single();
-
-if (ie) {
-  alert(`Archivo subido pero error al registrar: ${ie.message}`);
-  event.target.value = "";
-  return;
-}
-
-if (isImage && inserted?.id) {
-  alert("📷 Imagen subida. Leyendo boleta con OCR...");
-
-  const { data: ocrData, error: ocrError } = await window.supabaseClient.functions.invoke(
-    "procesar-ocr-boleta",
-    {
-      body: {
-        id: inserted.id,
-        foto_path: stored,
-        proyecto: PROJECT_NAME
-      }
+  const isImage=["jpg","jpeg","png"].includes(ext);
+  const{data:inserted,error:ie}=await window.supabaseClient
+    .from("gastos_junquillar_app")
+    .insert({fecha:new Date().toISOString().slice(0,10),proyecto:PROJECT_NAME,observacion:`Archivo: ${file.name}`,estado_ocr:isImage?"procesando":"pendiente",foto_path:stored})
+    .select("id")
+    .single();
+  if(ie){alert(`Archivo subido pero error al registrar: ${ie.message}`);event.target.value="";return;}
+  if(isImage&&inserted?.id){
+    alert("Imagen subida. Leyendo boleta con OCR...");
+    const{data:ocrData,error:ocrError}=await window.supabaseClient.functions.invoke("procesar-ocr-boleta",{body:{id:inserted.id,foto_path:stored,proyecto:PROJECT_NAME}});
+    if(ocrError||!ocrData?.ok){
+      console.error("OCR error:",ocrError||ocrData);
+      await window.supabaseClient.from("gastos_junquillar_app").update({estado_ocr:"pendiente",observacion:`Archivo: ${file.name} - OCR pendiente`}).eq("id",inserted.id);
+      alert("Imagen subida, pero no se pudo leer automaticamente. Revisa manualmente.");
+      event.target.value="";await loadData();return;
     }
-  );
-
-  if (ocrError || !ocrData?.ok) {
-    console.error("OCR error:", ocrError || ocrData);
-
-    await window.supabaseClient
-      .from("gastos_junquillar_app")
-      .update({
-        estado_ocr: "pendiente",
-        observacion: `Archivo: ${file.name} · OCR pendiente`
-      })
-      .eq("id", inserted.id);
-
-    alert("⚠️ Imagen subida, pero no se pudo leer automáticamente. Revisa manualmente.");
-    event.target.value = "";
-    await loadData();
-    return;
+    alert("Documento leido. Revisa los datos antes de aprobar.");
+  }else{
+    alert("Archivo adjuntado.");
   }
-
-  alert("✅ Documento leído. Revisa los datos antes de aprobar.");
-} else {
-  alert("📎 Archivo adjuntado.");
-}
-
-event.target.value = "";
-await loadData();
+  event.target.value="";await loadData();
 }
 function setupFileUpload(){
   const input=$("file-input");if(!input)return;
@@ -2409,7 +2372,6 @@ window.toggleDetalle = function () {
   if (!el) return;
   el.style.display = el.style.display === "none" ? "block" : "none";
 };
-
 
 
 
