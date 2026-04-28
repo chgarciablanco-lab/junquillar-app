@@ -1301,3 +1301,306 @@ svg { display: inline-block; vertical-align: middle; }
 [data-theme="dark"] .export-fmt-btn:hover { background: #2d4060; }
 [data-theme="dark"] .export-chip      { background: #1e293b; border-color: var(--line); }
 [data-theme="dark"] .export-chip:hover { background: #052e16; border-color: #065f46; color: #34d399; }
+
+/* ============================================================
+   VENTAS — CRUD NUEVO BOTÓN
+   ============================================================ */
+.jv-nuevo-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--green); color: #fff;
+  border: none; border-radius: var(--radius-sm);
+  padding: 8px 18px; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: var(--transition);
+  white-space: nowrap; flex-shrink: 0;
+}
+.jv-nuevo-btn:hover { background: #047857; box-shadow: 0 2px 8px rgba(5,150,105,.3); }
+
+/* Grid extra para Ingresos (con columna Acc.) */
+.jv-ing-head, .jv-ing-row  { grid-template-columns: 90px 1fr 110px 120px 100px 64px; }
+/* Grid extra para Cotizaciones (con columna Acc.) */
+.jv-cot-head, .jv-cot-row  { grid-template-columns: 90px 140px 1fr 100px 90px 110px 90px 64px; }
+/* Grid extra para Contactos (con columna Acc.) */
+.jv-cont-head, .jv-cont-row { grid-template-columns: 1fr 100px 130px 1fr 80px 64px; }
+
+/* ============================================================
+   MODAL AMPLIADO (ventas con más campos)
+   ============================================================ */
+.modal-box-lg {
+  max-width: 720px;
+  width: 95vw;
+}
+.modal-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* ============================================================
+   CAJA E IVA — CONTROL DE CAJA
+   ============================================================ */
+.caja-status {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 14px 18px; border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+}
+.caja-sin-movimiento { background: #f8fafc; }
+.caja-abierta  { background: #f0fdf4; border-color: #a7f3d0; }
+.caja-cuadro   { background: #f0fdf4; border-color: #a7f3d0; }
+.caja-descuadro{ background: #fff1f2; border-color: #fecdd3; }
+.caja-status-icon  { font-size: 24px; line-height: 1; flex-shrink: 0; margin-top: 2px; }
+.caja-status-label { font-size: 15px; font-weight: 700; color: var(--text); }
+.caja-status-sub   { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.caja-detalle { border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; }
+.caja-comparacion {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.caja-comp-title {
+  background: #f8fafc; padding: 10px 16px;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em;
+  border-bottom: 1px solid var(--line);
+}
+.caja-comp-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 16px; border-bottom: 1px solid var(--line-soft);
+  font-size: 13px; color: var(--text);
+}
+.caja-comp-row:last-child { border-bottom: none; }
+.caja-comp-result {
+  background: #f8fafc;
+  border-top: 2px solid var(--line) !important;
+  font-weight: 600;
+}
+@media (max-width: 700px) {
+  .caja-manual-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   DOCUMENTOS — LOG DE ARCHIVOS
+   ============================================================ */
+.doc-log-head, .doc-log-row {
+  display: grid;
+  grid-template-columns: 40px 1fr 72px 90px 1fr 48px;
+  align-items: center;
+  gap: 0 12px;
+}
+.doc-log-row { padding: 10px 14px; }
+
+/* ============================================================
+   BALANCE — PÉRDIDA Y GANANCIA
+   ============================================================ */
+.pl-head, .pl-row { display: grid; grid-template-columns: 1fr 150px 150px; gap: 0 8px; align-items: center; }
+.pl-head { background: #f1f5f9; border-radius: 8px 8px 0 0; }
+.pl-total { background: #f8fafc; font-weight: 700; border-top: 2px solid var(--line); }
+.balance-note {
+  margin-top: 10px; padding: 10px 14px;
+  background: #f0f9ff; border: 1px solid #bae6fd;
+  border-radius: 10px; font-size: 12px; color: #0369a1;
+}
+
+/* Dark mode para nuevos elementos */
+[data-theme="dark"] .caja-comp-title  { background: #1e293b; }
+[data-theme="dark"] .caja-comp-result { background: #1e293b; }
+[data-theme="dark"] .caja-comparacion { border-color: var(--line); }
+[data-theme="dark"] .balance-note     { background: #0c1a2e; border-color: #1e40af; color: #93c5fd; }
+[data-theme="dark"] .jv-nuevo-btn     { background: #059669; }
+[data-theme="dark"] .jv-nuevo-btn:hover { background: #047857; }
+
+/* ============================================================
+   CONTROL FINANCIERO
+   ============================================================ */
+
+/* KPI cards */
+.cf-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 20px 0 18px;
+}
+.cf-kpi-card {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  transition: var(--transition);
+}
+.cf-kpi-card:hover { box-shadow: var(--shadow-sm); }
+.cf-kpi-lbl  { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+.cf-kpi-val  { font-size: 22px; font-weight: 700; letter-spacing: -.03em; margin-bottom: 4px; line-height: 1.1; }
+.cf-kpi-sub  { font-size: 12px; color: var(--muted-soft); line-height: 1.4; }
+
+/* Table wrapper — horizontal scroll */
+.cf-table-wrap {
+  overflow-x: auto;
+  margin: 0 -4px;
+  padding: 0 4px 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Table base */
+.cf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 960px;
+}
+
+/* Header */
+.cf-table thead tr { border-bottom: 2px solid var(--line); }
+.cf-table thead th {
+  padding: 10px 14px;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+  background: #f8fafc;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.cf-th-lbl {
+  text-align: left;
+  min-width: 230px;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #f8fafc;
+}
+.cf-th-month { text-align: right; min-width: 110px; }
+
+/* Label column (sticky left) */
+.cf-lbl {
+  padding: 7px 14px;
+  position: sticky;
+  left: 0;
+  background: var(--panel);
+  z-index: 1;
+  white-space: nowrap;
+  border-right: 1px solid var(--line-soft);
+  color: var(--text);
+  font-size: 13px;
+}
+
+/* Number cells */
+.cf-num {
+  padding: 7px 14px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* Value colours */
+.cf-pos  { color: var(--brand); font-weight: 500; }
+.cf-neg  { color: var(--red);   font-weight: 500; }
+.cf-zero { color: var(--muted-soft); }
+
+/* Regular data rows */
+.cf-data-row .cf-num { color: var(--text); }
+.cf-data-row:hover td,
+.cf-data-row:hover .cf-lbl { background: #f8fafc !important; }
+
+/* Section header rows */
+.cf-sec-row td {
+  background: #f1f5f9;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--muted);
+  padding: 10px 14px 5px;
+  border-bottom: none;
+}
+
+/* Subtotal rows */
+.cf-tot-row td {
+  background: #f8fafc;
+  font-weight: 700;
+  border-top: 1px solid var(--line);
+  border-bottom: 2px solid var(--line);
+  padding: 8px 14px;
+}
+.cf-tot-row .cf-lbl { background: #f8fafc; }
+
+/* Spacer */
+.cf-spacer-row td { height: 6px; background: transparent; border: none; padding: 0; }
+
+/* EBITDA */
+.cf-ebitda-row td {
+  font-weight: 700;
+  border-top: 2px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 9px 14px;
+}
+.cf-ebitda-row .cf-lbl { background: var(--panel); }
+
+/* Resultado después de impuesto */
+.cf-result-row td {
+  font-weight: 700;
+  border-top: 1px solid var(--line);
+  border-bottom: 2px solid var(--line);
+  padding: 9px 14px;
+}
+.cf-result-row .cf-lbl { background: var(--panel); }
+
+/* Financiamiento recibido */
+.cf-financ-row .cf-lbl { color: var(--muted); font-style: italic; }
+.cf-financ-row .cf-num { color: var(--muted); font-style: italic; }
+
+/* Caja neta del mes */
+.cf-cajaneta-row td {
+  background: #fafafa;
+  font-weight: 600;
+  border-top: 1px solid var(--line);
+  padding: 8px 14px;
+}
+.cf-cajaneta-row .cf-lbl { background: #fafafa; }
+
+/* Caja acumulada */
+.cf-cajaacum-row td {
+  background: #f1f5f9;
+  font-weight: 700;
+  font-size: 13.5px;
+  border-top: 2px solid var(--line);
+  border-bottom: 2px solid var(--line);
+  padding: 11px 14px;
+}
+.cf-cajaacum-row .cf-lbl { background: #f1f5f9; }
+
+/* Dark mode */
+[data-theme="dark"] .cf-kpi-card   { background: #1e293b; border-color: #334155; }
+[data-theme="dark"] .cf-kpi-lbl    { color: var(--muted-soft); }
+[data-theme="dark"] .cf-table thead th { background: #1e293b; }
+[data-theme="dark"] .cf-th-lbl     { background: #1e293b; }
+[data-theme="dark"] .cf-lbl        { background: #0f172a; border-right-color: #1e293b; }
+[data-theme="dark"] .cf-num        { border-bottom-color: #1e293b; }
+[data-theme="dark"] .cf-data-row:hover td,
+[data-theme="dark"] .cf-data-row:hover .cf-lbl { background: #1e293b !important; }
+[data-theme="dark"] .cf-sec-row td { background: #111827; color: #64748b; }
+[data-theme="dark"] .cf-tot-row td,
+[data-theme="dark"] .cf-tot-row .cf-lbl { background: #1e293b; border-color: #334155; }
+[data-theme="dark"] .cf-ebitda-row td    { border-color: #334155; }
+[data-theme="dark"] .cf-ebitda-row .cf-lbl  { background: #0f172a; }
+[data-theme="dark"] .cf-result-row td    { border-color: #334155; }
+[data-theme="dark"] .cf-result-row .cf-lbl  { background: #0f172a; }
+[data-theme="dark"] .cf-cajaneta-row td,
+[data-theme="dark"] .cf-cajaneta-row .cf-lbl { background: #1e293b; }
+[data-theme="dark"] .cf-cajaacum-row td,
+[data-theme="dark"] .cf-cajaacum-row .cf-lbl { background: #1e293b; border-color: #475569; }
+[data-theme="dark"] .cf-spacer-row td { background: transparent; }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .cf-kpi-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  .cf-kpi-grid { grid-template-columns: 1fr; }
+}
