@@ -22,8 +22,8 @@ const views = {
   documentos:  { title:"Documentos",         subtitle:"Carga de facturas, boletas y respaldo documental",    visible:["section-upload-only"] },
   proveedores: { title:"Proveedores",        subtitle:"Análisis por proveedor, documentos y concentración",  visible:["section-proveedores"] },
   caja:        { title:"Caja e IVA",         subtitle:"Crédito fiscal, documentos y detalle mensual",        visible:["section-caja"] },
-  balance:     { title:"Balance",            subtitle:"Vista contable calculada desde los gastos registrados",visible:["section-balance"] },
-  reportes:    { title:"Reportes",           subtitle:"Análisis resumido por categoría y mes",               visible:["section-reportes"] },
+  "control-financiero": { title:"Control Financiero",  subtitle:"Flujo financiero mensual del proyecto — sin IVA",            visible:["section-control-financiero"] },
+  reportes:             { title:"Reportes",             subtitle:"Análisis resumido por categoría y mes",                     visible:["section-reportes"] },
   ventas:       { title:"Ventas",            subtitle:"Ingresos, cotizaciones y contactos del proyecto",     visible:["section-ventas"] },
   insumos:      { title:"Insumos",           subtitle:"Control de materiales y stock en obra",               visible:["section-insumos"] },
   configuracion:{ title:"Configuración",     subtitle:"Ajustes generales del proyecto y apariencia",         visible:["section-config"] }
@@ -411,7 +411,153 @@ function renderProveedores(){
 }
 
 /* ── CAJA ─────────────────────────────────────────────────── */
-function renderCaja(){renderCajaKpis();renderCajaTipos();renderCajaMensual();}
+let cajaEstado = JSON.parse(localStorage.getItem("junqo_caja_estado") || "null") || null;
+// cajaEstado: { abierta, fechaApertura, horaApertura, saldoInicial, responsable, obsApertura,
+//               fechaCierre, horaCierre, saldoCierre, obsCierre, cuadro, diferencia }
+
+function saveCajaEstado(){ localStorage.setItem("junqo_caja_estado", JSON.stringify(cajaEstado)); }
+
+function renderCaja(){ renderCajaControl(); renderCajaKpis(); renderCajaTipos(); renderCajaMensual(); }
+
+function renderCajaControl(){
+  const el = $("caja-control");
+  if(!el) return;
+  const abierta = cajaEstado?.abierta === true;
+  const cerrada = cajaEstado && !cajaEstado.abierta && cajaEstado.saldoCierre !== undefined;
+
+  let statusHtml = "";
+  if(!cajaEstado){
+    statusHtml = `<div class="caja-status caja-sin-movimiento">
+      <span class="caja-status-icon">🔒</span>
+      <div><div class="caja-status-label">Caja cerrada</div><div class="caja-status-sub">No hay registro de apertura</div></div>
+    </div>`;
+  } else if(abierta){
+    const ingresosDelDia = (typeof ventasIngresos!=="undefined"?ventasIngresos:[])
+      .filter(v=>v.estado==="Recibido").reduce((a,v)=>a+numberValue(v.monto),0);
+    const saldoEsperado = numberValue(cajaEstado.saldoInicial) + ingresosDelDia;
+    statusHtml = `<div class="caja-status caja-abierta">
+      <span class="caja-status-icon">🟢</span>
+      <div><div class="caja-status-label">Caja abierta</div>
+      <div class="caja-status-sub">Desde ${cajaEstado.fechaApertura||"—"} ${cajaEstado.horaApertura||""} · Responsable: ${cajaEstado.responsable||"—"}</div></div>
+    </div>
+    <div class="caja-detalle" style="margin-top:14px">
+      <div class="caja-comp-row"><span>Saldo inicial</span><strong>${formatoCLP(cajaEstado.saldoInicial||0)}</strong></div>
+      <div class="caja-comp-row"><span>Ingresos recibidos (Ventas)</span><strong style="color:var(--green)">${formatoCLP(ingresosDelDia)}</strong></div>
+      <div class="caja-comp-row caja-comp-result"><span><strong>Saldo esperado al cierre</strong></span><strong>${formatoCLP(saldoEsperado)}</strong></div>
+      ${cajaEstado.obsApertura?`<div class="caja-comp-row"><span>Observación</span><span style="color:var(--muted)">${cajaEstado.obsApertura}</span></div>`:""}
+    </div>`;
+  } else if(cerrada){
+    const ok = cajaEstado.cuadro;
+    statusHtml = `<div class="caja-status ${ok?"caja-cuadro":"caja-descuadro"}">
+      <span class="caja-status-icon">${ok?"✅":"❌"}</span>
+      <div><div class="caja-status-label">${ok?"Caja cerrada — Cuadró":"Caja cerrada — No cuadró"}</div>
+      <div class="caja-status-sub">Cerrada el ${cajaEstado.fechaCierre||"—"} ${cajaEstado.horaCierre||""}</div></div>
+    </div>
+    <div class="caja-detalle" style="margin-top:14px">
+      <div class="caja-comp-row"><span>Saldo inicial</span><strong>${formatoCLP(cajaEstado.saldoInicial||0)}</strong></div>
+      <div class="caja-comp-row"><span>Saldo esperado</span><strong>${formatoCLP(cajaEstado.saldoEsperado||0)}</strong></div>
+      <div class="caja-comp-row"><span>Saldo contado al cierre</span><strong>${formatoCLP(cajaEstado.saldoCierre||0)}</strong></div>
+      <div class="caja-comp-row caja-comp-result">
+        <span><strong>Diferencia</strong></span>
+        <strong style="color:${ok?'var(--green)':'var(--red)'}">${formatoCLP(cajaEstado.diferencia||0)}</strong>
+      </div>
+      ${cajaEstado.obsCierre?`<div class="caja-comp-row"><span>Observación cierre</span><span style="color:var(--muted)">${cajaEstado.obsCierre}</span></div>`:""}
+    </div>`;
+  }
+
+  el.innerHTML = `<div class="card" style="margin-bottom:16px">
+    <div class="card-header-row">
+      <div>
+        <div class="card-title">🏦 Control de Caja</div>
+        <div class="card-sub">Apertura, cierre y cuadre de caja diario</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        ${!abierta ? `<button class="jv-nuevo-btn" onclick="openModalAbrirCaja()">🔓 Abrir caja</button>` : ""}
+        ${abierta ? `<button class="jv-nuevo-btn" style="background:var(--red)" onclick="openModalCerrarCaja()">🔒 Cerrar caja</button>` : ""}
+        ${cerrada ? `<button class="filter-btn-clear" onclick="resetCaja()" style="margin:0">↺ Nueva apertura</button>` : ""}
+      </div>
+    </div>
+    <div style="margin-top:16px">
+      ${statusHtml}
+    </div>
+  </div>`;
+}
+
+function openModalAbrirCaja(){
+  const now = new Date();
+  $("ac-fecha").value = now.toISOString().slice(0,10);
+  $("ac-hora").value = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+  $("ac-saldo").value = "";
+  $("ac-responsable").value = "";
+  $("ac-obs").value = "";
+  $("modal-abrir-caja").classList.remove("modal-hidden");
+}
+function closeModalAbrirCaja(){ $("modal-abrir-caja").classList.add("modal-hidden"); }
+
+function guardarAperturaCaja(){
+  const saldo = Number($("ac-saldo").value);
+  if(!$("ac-fecha").value){ showToast("⚠️ Ingresa la fecha de apertura."); return; }
+  cajaEstado = {
+    abierta: true,
+    fechaApertura: $("ac-fecha").value,
+    horaApertura: $("ac-hora").value,
+    saldoInicial: saldo,
+    responsable: ($("ac-responsable").value||"").trim(),
+    obsApertura: ($("ac-obs").value||"").trim()
+  };
+  saveCajaEstado();
+  closeModalAbrirCaja();
+  renderCajaControl();
+  showToast("✓ Caja abierta correctamente");
+}
+
+function openModalCerrarCaja(){
+  if(!cajaEstado?.abierta){ showToast("⚠️ La caja no está abierta."); return; }
+  const ingresosDelDia = (typeof ventasIngresos!=="undefined"?ventasIngresos:[])
+    .filter(v=>v.estado==="Recibido").reduce((a,v)=>a+numberValue(v.monto),0);
+  const saldoEsperado = numberValue(cajaEstado.saldoInicial) + ingresosDelDia;
+  const now = new Date();
+  $("cc-fecha").value = now.toISOString().slice(0,10);
+  $("cc-hora").value = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+  $("cc-saldo-esperado").value = formatoCLP(saldoEsperado);
+  $("cc-saldo").value = "";
+  $("cc-obs").value = "";
+  $("modal-cerrar-caja").classList.remove("modal-hidden");
+}
+function closeModalCerrarCaja(){ $("modal-cerrar-caja").classList.add("modal-hidden"); }
+
+function guardarCierreCaja(){
+  if(!$("cc-fecha").value){ showToast("⚠️ Ingresa la fecha de cierre."); return; }
+  const ingresosDelDia = (typeof ventasIngresos!=="undefined"?ventasIngresos:[])
+    .filter(v=>v.estado==="Recibido").reduce((a,v)=>a+numberValue(v.monto),0);
+  const saldoEsperado = numberValue(cajaEstado.saldoInicial) + ingresosDelDia;
+  const saldoCierre = Number($("cc-saldo").value) || 0;
+  const diferencia = saldoCierre - saldoEsperado;
+  const cuadro = Math.abs(diferencia) < 1;
+  cajaEstado = {
+    ...cajaEstado,
+    abierta: false,
+    fechaCierre: $("cc-fecha").value,
+    horaCierre: $("cc-hora").value,
+    saldoEsperado,
+    saldoCierre,
+    diferencia,
+    cuadro,
+    obsCierre: ($("cc-obs").value||"").trim()
+  };
+  saveCajaEstado();
+  closeModalCerrarCaja();
+  renderCajaControl();
+  showToast(cuadro ? "✅ Caja cuadró correctamente" : `❌ Caja no cuadró. Diferencia: ${formatoCLP(diferencia)}`);
+}
+
+function resetCaja(){
+  if(!confirm("¿Registrar una nueva apertura de caja? Se perderá el registro actual.")) return;
+  cajaEstado = null;
+  saveCajaEstado();
+  renderCajaControl();
+  showToast("↺ Registro de caja reiniciado");
+}
 function renderCajaKpis(){
   const el=$("caja-kpis");if(!el)return;
   const t=getTotals(),docsConIva=gastos.filter(g=>numberValue(g.iva)>0).length;
@@ -432,20 +578,95 @@ function renderCajaMensual(){
 
 /* ── BALANCE ──────────────────────────────────────────────── */
 function renderBalance(){
-  const el=$("balance-table");if(!el)return;
-  const t=getTotals();
-  if(!gastos.length){el.innerHTML=emptyState("Sin movimientos.");return;}
-  const TERRENO=100000000,APORTE=60000000;
-  const aT=TERRENO,aO=t.neto,aI=t.iva,totA=aT+aO+aI;
-  const pS=APORTE,pG=t.total,totP=pS+pG;
-  const diff=totA-totP;
-  const clp=v=>formatoCLP(v),z=()=>`<span style="color:#94a3b8">$0</span>`;
-  const cell=(v,col)=>(!v||v===0)?z():(col?`<span style="color:${col};font-weight:600">${clp(v)}</span>`:clp(v));
-  const row=(n,c,d,h,de,ac,a,p,pe,g,x="")=>`<div class="bal-row${x}"><div class="bal-n">${n}</div><div class="bal-cuenta">${c}</div><div class="bal-num">${cell(d)}</div><div class="bal-num">${cell(h)}</div><div class="bal-num">${cell(de)}</div><div class="bal-num">${cell(ac)}</div><div class="bal-num">${cell(a,"#059669")}</div><div class="bal-num">${cell(p)}</div><div class="bal-num">${cell(pe,"#e11d48")}</div><div class="bal-num">${cell(g,"#059669")}</div></div>`;
-  const sec=l=>`<div class="bal-section">${l}</div>`;
-  el.innerHTML=`<div class="bal-wrap"><div class="bal-group-head"><div class="bal-gh-spacer"></div><div class="bal-gh-group">MOVIMIENTOS</div><div class="bal-gh-group">SALDOS</div><div class="bal-gh-group">BALANCE</div><div class="bal-gh-group">RESULTADOS</div></div><div class="bal-col-head"><div class="bal-n">N°</div><div class="bal-cuenta">Cuenta</div><div class="bal-num">DEBE</div><div class="bal-num">HABER</div><div class="bal-num">DEUDOR</div><div class="bal-num">ACREEDOR</div><div class="bal-num">ACTIVO</div><div class="bal-num">PASIVO</div><div class="bal-num">PÉRDIDA</div><div class="bal-num">GANANCIA</div></div>${sec("ACTIVOS")}${row("1","Terreno",aT,0,aT,0,aT,0,0,0)}${row("2","Obra en Curso",aO,0,aO,0,aO,0,0,0)}${row("3","IVA Crédito Fiscal",aI,0,aI,0,aI,0,0,0)}${sec("PASIVOS")}${row("4","Cuenta por pagar al Socio",0,pS,0,pS,0,pS,0,0)}${row("5","Gastos por pagar",0,pG,0,pG,0,pG,0,0)}${diff!==0?row("6",diff>0?"Capital pendiente":"Ajuste",diff>0?diff:0,diff<0?Math.abs(diff):0,diff>0?diff:0,diff<0?Math.abs(diff):0,0,0,diff<0?Math.abs(diff):0,diff>0?diff:0):""}<div class="bal-row bal-total"><div class="bal-n"></div><div class="bal-cuenta">TOTAL</div><div class="bal-num">${clp(totA)}</div><div class="bal-num">${clp(totP+(diff>0?diff:0))}</div><div class="bal-num">${clp(totA)}</div><div class="bal-num">${clp(totP+(diff>0?diff:0))}</div><div class="bal-num">${clp(totA)}</div><div class="bal-num">${clp(totP)}</div><div class="bal-num">$0</div><div class="bal-num">$0</div></div></div>`;
-  el.parentElement.querySelector(".balance-note")?.remove();
-  el.insertAdjacentHTML("afterend",`<div class="balance-note">⚠️ Valores calculados automáticamente. No reemplaza revisión contable formal.</div>`);
+  const el = $("balance-table");
+  if(!el) return;
+
+  const rows = getBalanceRows();
+  const hasMovements = gastos.length > 0 || getVentasTotals().totalIngresos > 0;
+
+  if(!hasMovements){
+    el.innerHTML = emptyState("Sin movimientos registrados.");
+    return;
+  }
+
+  const clp = v => formatoCLP(v);
+  const z = () => `<span style="color:#94a3b8">$0</span>`;
+  const cell = (v, col) => (!v || v === 0) ? z() : (col ? `<span style="color:${col};font-weight:600">${clp(v)}</span>` : clp(v));
+  const sec = l => `<div class="bal-section">${l}</div>`;
+
+  const rowHtml = r => {
+    const isTotal = String(r.Cuenta).toUpperCase() === "TOTAL";
+    return `<div class="bal-row${isTotal ? " bal-total" : ""}">
+      <div class="bal-n">${r["N°"] ?? ""}</div>
+      <div class="bal-cuenta">${r.Cuenta}</div>
+      <div class="bal-num">${cell(r.Debe)}</div>
+      <div class="bal-num">${cell(r.Haber)}</div>
+      <div class="bal-num">${cell(r.Deudor)}</div>
+      <div class="bal-num">${cell(r.Acreedor)}</div>
+      <div class="bal-num">${cell(r.Activo, "#059669")}</div>
+      <div class="bal-num">${cell(r.Pasivo)}</div>
+      <div class="bal-num">${cell(r.Pérdida, "#e11d48")}</div>
+      <div class="bal-num">${cell(r.Ganancia, "#059669")}</div>
+    </div>`;
+  };
+
+  const activos    = rows.filter(r => r._seccion === "activo");
+  const pasivos    = rows.filter(r => r._seccion === "pasivo");
+  const patrimonio = rows.filter(r => r._seccion === "patrimonio");
+  const ajuste     = rows.filter(r => r._seccion === "ajuste");
+  const resultados = rows.filter(r => r._seccion === "resultado");
+  const total      = rows.find(r => r.Cuenta === "TOTAL");
+
+  const v = getVentasTotals();
+  const modoVendido = v.totalVentasPropiedad > 0;
+  const TERRENO_VAL = 100000000;
+  const t = getTotals();
+
+  let modoBadge, resultNote;
+  if (modoVendido) {
+    const utilidad = v.totalVentasPropiedad - TERRENO_VAL - t.neto;
+    const utilStr  = utilidad >= 0
+      ? `Utilidad neta: <strong style="color:#059669">${formatoCLP(utilidad)}</strong>`
+      : `Pérdida neta: <strong style="color:#e11d48">${formatoCLP(Math.abs(utilidad))}</strong>`;
+    modoBadge = `<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;margin-bottom:12px;border-radius:20px;font-size:12px;font-weight:700;background:#fef9c3;color:#854d0e;border:1px solid #fde047">🏠 PROYECTO VENDIDO</div>`;
+    resultNote = `Terreno y Obra reclasificados como costo de venta en columna Pérdida. ${utilStr}. Utilidad cierra en Patrimonio (columna Pasivo) y equilibra la columna Pérdida. IVA CF permanece como activo tributario.`;
+  } else {
+    modoBadge = `<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;margin-bottom:12px;border-radius:20px;font-size:12px;font-weight:700;background:#f0fdf4;color:#166534;border:1px solid #86efac">🏗️ EN EJECUCIÓN</div>`;
+    resultNote = `Sin ventas de propiedad — Pérdida y Ganancia = $0. Gastos capitalizados como <em>Obra en Curso</em>. Aportes = Patrimonio; Anticipos = Pasivo. La brecha entre inversiones y fuentes conocidas se muestra como "Financiamiento a determinar".`;
+  }
+
+  el.innerHTML = `
+    <div class="bal-wrap">
+      ${modoBadge}
+      <div class="bal-group-head">
+        <div class="bal-gh-spacer"></div>
+        <div class="bal-gh-group">MOVIMIENTOS</div>
+        <div class="bal-gh-group">SALDOS</div>
+        <div class="bal-gh-group">BALANCE</div>
+        <div class="bal-gh-group">RESULTADOS</div>
+      </div>
+      <div class="bal-col-head">
+        <div class="bal-n">N°</div>
+        <div class="bal-cuenta">Cuenta</div>
+        <div class="bal-num">DEBE</div>
+        <div class="bal-num">HABER</div>
+        <div class="bal-num">DEUDOR</div>
+        <div class="bal-num">ACREEDOR</div>
+        <div class="bal-num">ACTIVO</div>
+        <div class="bal-num">PASIVO</div>
+        <div class="bal-num">PÉRDIDA</div>
+        <div class="bal-num">GANANCIA</div>
+      </div>
+      ${sec("ACTIVOS")}
+      ${activos.map(rowHtml).join("")}
+      ${pasivos.length ? sec("PASIVOS") + pasivos.map(rowHtml).join("") : ""}
+      ${sec("PATRIMONIO / FINANCIAMIENTO")}
+      ${patrimonio.map(rowHtml).join("")}
+      ${ajuste.map(rowHtml).join("")}
+      ${resultados.length ? sec("RESULTADOS") + resultados.map(rowHtml).join("") : ""}
+      ${total ? rowHtml(total) : ""}
+      <div class="balance-note">ℹ️ ${resultNote}</div>
+    </div>`;
 }
 
 /* ── CONTROL DE PROYECTO ──────────────────────────────────── */
@@ -537,13 +758,19 @@ function getExportData(key){
       rows:gastos.map(g=>[normalizarFecha(g.fecha),g.proveedor||"",g.rut||"",g.tipo_documento||"",g.numero_documento||"",g.categoria||"",g.neto,g.iva,g.total,g.metodo_pago||"",g.estado_ocr||""]) };
   }
   if(key==="balance"){
-    const grps=groupBy(gastos,g=>g.categoria||"Sin categoría"),tot=sumBy(gastos,"neto");
-    const rows=Object.entries(grps).sort((a,b)=>sumBy(b[1],"neto")-sumBy(a[1],"neto")).map(([cat,rs])=>{
-      const neto=sumBy(rs,"neto"),iva=sumBy(rs,"iva"),t=sumBy(rs,"total");
-      return[cat,rs.length,neto,iva,t,tot?(neto/tot*100).toFixed(1)+"%":"0%"];
-    });
-    rows.push(["TOTAL",gastos.length,sumBy(gastos,"neto"),sumBy(gastos,"iva"),sumBy(gastos,"total"),"100%"]);
-    return{ name:"Balance", headers:["Categoría","N° Docs","Neto","IVA","Total","% s/ Total"], rows };
+    const rows = getBalanceRows().map(r => [
+      r["N°"],
+      r.Cuenta,
+      r.Debe,
+      r.Haber,
+      r.Deudor,
+      r.Acreedor,
+      r.Activo,
+      r.Pasivo,
+      r.Pérdida,
+      r.Ganancia
+    ]);
+    return{ name:"Balance", headers:["N°","Cuenta","Debe","Haber","Deudor","Acreedor","Activo","Pasivo","Pérdida","Ganancia"], rows };
   }
   if(key==="proveedores"){
     const grps=groupBy(gastos,g=>g.proveedor||"Pendiente"),tot=sumBy(gastos,"neto");
@@ -1042,23 +1269,493 @@ function setupNavigation(){
   $("btn-ver-reportes")?.addEventListener("click",()=>document.querySelector('[data-view="reportes"]')?.click());
 }
 
+/* ── DOCUMENTOS: LOG DE ARCHIVOS ─────────────────────────── */
+function renderDocumentoLog(){
+  const el = $("documento-log");
+  if(!el) return;
+  const docsConArchivo = gastos
+    .filter(g => g.foto_path)
+    .sort((a,b)=>{
+      const da = new Date(b.created_at||b.fecha||"1970");
+      const db = new Date(a.created_at||a.fecha||"1970");
+      return da - db;
+    })
+    .slice(0, 30);
+  if(!docsConArchivo.length){
+    el.innerHTML = emptyState("No hay archivos subidos todavía.");
+    return;
+  }
+  const iconExt = ext => {
+    if(["jpg","jpeg","png"].includes(ext)) return "🖼️";
+    if(ext === "pdf") return "📄";
+    if(["xls","xlsx"].includes(ext)) return "📊";
+    if(ext === "csv") return "📋";
+    return "📎";
+  };
+  el.innerHTML = docsConArchivo.map(g => {
+    const ext = getFileExtension(g.foto_path);
+    const nombre = decodeURIComponent(g.foto_path.split("/").pop() || "archivo");
+    return `<div class="table-row doc-log-row">
+      <div style="font-size:18px;text-align:center">${iconExt(ext)}</div>
+      <div class="doc-name" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${nombre}">${nombre}</div>
+      <div><span class="cat-badge" style="background:#eff6ff;color:#3b82f6;font-size:10px">${ext.toUpperCase()}</span></div>
+      <div>${normalizarFecha(g.fecha)}</div>
+      <div style="font-size:12px;color:var(--muted)">${g.proveedor||"Sin proveedor"}</div>
+      <div>
+        <button class="action-btn foto-btn" data-path="${g.foto_path}" title="Ver archivo" style="opacity:.4;cursor:default">📎</button>
+      </div>
+    </div>`;
+  }).join("");
+  el.querySelectorAll(".foto-btn").forEach(async b => {
+    const url = await getFotoUrl(b.dataset.path);
+    if(url){ b.style.opacity="1"; b.style.cursor="pointer"; b.onclick=()=>window.open(url,"_blank"); }
+  });
+}
+
 /* ── RENDER ALL ───────────────────────────────────────────── */
+/* ── CONTROL FINANCIERO ───────────────────────────────────── */
+
+const CF_MONTHS = ["M0","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+const cfDemoData = {
+  ventaCasa:     {M0:0,Ene:0,Feb:0,Mar:0,Abr:0,May:0,Jun:0,Jul:0,Ago:0,Sep:0,Oct:0,Nov:0,Dic:0},
+  otrosIngresos: {M0:0,Ene:0,Feb:0,Mar:0,Abr:0,May:0,Jun:0,Jul:0,Ago:0,Sep:0,Oct:0,Nov:0,Dic:0},
+  gastosOp: [
+    {label:"Terreno",          M0:100000000,Ene:0,        Feb:0,        Mar:0,        Abr:0,May:0,Jun:0,Jul:0,Ago:0,Sep:0,Oct:0,Nov:0,Dic:0},
+    {label:"Materiales",       M0:0,        Ene:18500000, Feb:22000000, Mar:12236637, Abr:0,May:0,Jun:0,Jul:0,Ago:0,Sep:0,Oct:0,Nov:0,Dic:0},
+    {label:"Mano de obra",     M0:0,        Ene:4000000,  Feb:6000000,  Mar:5000000,  Abr:0,May:0,Jun:0,Jul:0,Ago:0,Sep:0,Oct:0,Nov:0,Dic:0},
+    {label:"Subcontratos",     M0:0,        Ene:0,        Feb:3000000,  Mar:2000000,  Abr:0,May:0,Jun:0,Jul:0,Ago:0,Sep:0,Oct:0,Nov:0,Dic:0},
+  ],
+  gastosAdm: [
+    {label:"Arquitecto / especialidades",    M0:2000000,Ene:0,     Feb:0,     Mar:0,     Abr:0,May:0,Jun:0,Jul:0,Ago:0,Sep:0,Oct:0,Nov:0,Dic:0},
+    {label:"Contabilidad / legales / banco", M0:250000, Ene:250000,Feb:250000,Mar:250000,Abr:0,May:0,Jun:0,Jul:0,Ago:0,Sep:0,Oct:0,Nov:0,Dic:0},
+    {label:"Permisos / trámites",            M0:500000, Ene:0,     Feb:0,     Mar:0,     Abr:0,May:0,Jun:0,Jul:0,Ago:0,Sep:0,Oct:0,Nov:0,Dic:0},
+  ],
+  impuesto:           {M0:0,Ene:0,Feb:0,Mar:0,Abr:0,May:0,Jun:0,Jul:0,Ago:0,Sep:0,Oct:0,Nov:0,Dic:0},
+  aporteCapital:      {M0:40000000,Ene:0,Feb:0,Mar:0,Abr:0,May:0,Jun:0,Jul:0,Ago:0,Sep:0,Oct:0,Nov:0,Dic:0},
+  creditoHipotecario: {M0:60000000,Ene:0,Feb:0,Mar:0,Abr:0,May:0,Jun:0,Jul:0,Ago:0,Sep:0,Oct:0,Nov:0,Dic:0},
+};
+
+function renderControlFinanciero() {
+  const el = $("cf-root");
+  if (!el) return;
+
+  const d  = cfDemoData;
+  const ms = CF_MONTHS;
+  const mv = (obj, m) => numberValue(obj[m]);
+
+  // ── Cálculos por mes ──
+  let cajaAcum = 0;
+  const C = {};
+  for (const m of ms) {
+    const ingresos  = mv(d.ventaCasa, m) + mv(d.otrosIngresos, m);
+    const gastosOp  = d.gastosOp.reduce( (s, r) => s + mv(r, m), 0);
+    const gastosAdm = d.gastosAdm.reduce((s, r) => s + mv(r, m), 0);
+    const ebitda    = ingresos - gastosOp - gastosAdm;
+    const impuesto  = mv(d.impuesto, m);
+    const resultado = ebitda - impuesto;
+    const financ    = mv(d.aporteCapital, m) + mv(d.creditoHipotecario, m);
+    const cajaNeta  = resultado + financ;
+    cajaAcum       += cajaNeta;
+    C[m] = { ingresos, gastosOp, gastosAdm, ebitda, impuesto, resultado, financ, cajaNeta, cajaAcum };
+  }
+
+  // ── KPI acumulados ──
+  const kpiResultado = ms.reduce((s, m) => s + C[m].resultado, 0);
+  const kpiFinanc    = ms.reduce((s, m) => s + C[m].financ, 0);
+  const kpiCaja      = C[ms[ms.length - 1]].cajaAcum;
+
+  // ── Helpers de formato ──
+  const fmt = v => {
+    if (v === 0) return `<span class="cf-zero">$0</span>`;
+    const s = Math.abs(v).toLocaleString("es-CL");
+    return v < 0 ? `<span class="cf-neg">-$${s}</span>` : `<span class="cf-pos">$${s}</span>`;
+  };
+  const fmtKpi = v => { const s = Math.abs(v).toLocaleString("es-CL"); return v < 0 ? `-$${s}` : `$${s}`; };
+  const kpiClr = v => v >= 0 ? "var(--brand)" : "var(--red)";
+
+  // ── Constructores de filas ──
+  const nCols = ms.length + 1;
+  const secRow  = lbl => `<tr class="cf-sec-row"><td colspan="${nCols}">${lbl}</td></tr>`;
+  const dataRow = (lbl, fn, cls = "") =>
+    `<tr class="cf-data-row${cls ? " " + cls : ""}">` +
+    `<td class="cf-lbl">${lbl}</td>` +
+    ms.map(m => `<td class="cf-num">${fmt(fn(m))}</td>`).join("") + `</tr>`;
+  const totRow = (lbl, key) =>
+    `<tr class="cf-tot-row"><td class="cf-lbl">${lbl}</td>` +
+    ms.map(m => `<td class="cf-num">${fmt(C[m][key])}</td>`).join("") + `</tr>`;
+  const keyRow = (lbl, key, cls) =>
+    `<tr class="${cls}"><td class="cf-lbl">${lbl}</td>` +
+    ms.map(m => `<td class="cf-num">${fmt(C[m][key])}</td>`).join("") + `</tr>`;
+  const spacerRow = () => `<tr class="cf-spacer-row"><td colspan="${nCols}"></td></tr>`;
+
+  el.innerHTML = `
+  <div class="card">
+    <div class="card-header-row">
+      <div>
+        <div class="card-title">Control Financiero Mensual</div>
+        <div class="card-sub">Flujo financiero mensual en pesos chilenos · sin IVA</div>
+      </div>
+    </div>
+
+    <div class="cf-kpi-grid">
+      <div class="cf-kpi-card">
+        <div class="cf-kpi-lbl">Resultado acumulado</div>
+        <div class="cf-kpi-val" style="color:${kpiClr(kpiResultado)}">${fmtKpi(kpiResultado)}</div>
+        <div class="cf-kpi-sub">Resultado después de impuesto — suma del período</div>
+      </div>
+      <div class="cf-kpi-card">
+        <div class="cf-kpi-lbl">Financiamiento total</div>
+        <div class="cf-kpi-val" style="color:var(--brand)">${fmtKpi(kpiFinanc)}</div>
+        <div class="cf-kpi-sub">Aportes de socios + crédito hipotecario acumulado</div>
+      </div>
+      <div class="cf-kpi-card">
+        <div class="cf-kpi-lbl">Caja acumulada</div>
+        <div class="cf-kpi-val" style="color:${kpiClr(kpiCaja)}">${fmtKpi(kpiCaja)}</div>
+        <div class="cf-kpi-sub">Posición de caja al cierre del período registrado</div>
+      </div>
+    </div>
+
+    <div class="cf-table-wrap">
+      <table class="cf-table">
+        <thead>
+          <tr>
+            <th class="cf-th-lbl">Concepto</th>
+            ${ms.map(m => `<th class="cf-th-month">${m}</th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${secRow("INGRESOS")}
+          ${dataRow("Venta casa",     m => mv(d.ventaCasa, m))}
+          ${dataRow("Otros ingresos", m => mv(d.otrosIngresos, m))}
+          ${totRow("Total ingresos", "ingresos")}
+
+          ${secRow("GASTOS OPERACIONALES / OBRA")}
+          ${d.gastosOp.map(r => dataRow(r.label, m => mv(r, m))).join("")}
+          ${totRow("Total gastos operacionales", "gastosOp")}
+
+          ${secRow("GASTOS ADMINISTRATIVOS")}
+          ${d.gastosAdm.map(r => dataRow(r.label, m => mv(r, m))).join("")}
+          ${totRow("Total gastos administrativos", "gastosAdm")}
+
+          ${spacerRow()}
+          ${keyRow("EBITDA / resultado antes de impuesto", "ebitda",    "cf-ebitda-row")}
+          ${dataRow("Impuesto estimado", m => mv(d.impuesto, m))}
+          ${keyRow("Resultado después de impuesto",        "resultado", "cf-result-row")}
+
+          ${secRow("FINANCIAMIENTO SIMPLE")}
+          ${dataRow("Aporte de capital socios",     m => mv(d.aporteCapital, m))}
+          ${dataRow("Crédito hipotecario bancario", m => mv(d.creditoHipotecario, m))}
+          ${totRow("Total financiamiento", "financ")}
+
+          ${spacerRow()}
+          ${dataRow("Financiamiento recibido", m => C[m].financ, "cf-financ-row")}
+          ${keyRow("Caja neta del mes", "cajaNeta", "cf-cajaneta-row")}
+          ${keyRow("Caja acumulada",   "cajaAcum", "cf-cajaacum-row")}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
 function renderAll(){
   renderKPIs();renderAlerts();renderBottomCards();
   renderDocs(docsVisibleLimit);renderProveedores();
-  renderCaja();renderBalance();renderControlProyecto();
+  renderCaja();renderControlProyecto();
   renderReportes();renderBudgetEditor();
   renderVentas();renderInsumos();renderConfiguracion();
+  renderDocumentoLog();
+  renderControlFinanciero();
 }
 
-/* ── CSV EXPORT ───────────────────────────────────────────── */
-function rowsToCSV(rows){
-  const h=["fecha","proveedor","rut","tipo_documento","numero_documento","categoria","neto","iva","total","metodo_pago","estado_ocr"];
-  const esc=v=>`"${String(v??"").replace(/"/g,'""')}"`;
-  return[h.join(";"),...rows.map(r=>h.map(f=>esc(r[f])).join(";"))].join("\n");
+/* ── EXPORTACIONES ────────────────────────────────────────── */
+
+function buildGastosExportRows(rows = filteredDocs) {
+  return rows.map(g => ({
+    Fecha: normalizarFecha(g.fecha),
+    Proveedor: g.proveedor || "",
+    RUT: g.rut || "",
+    "Tipo documento": g.tipo_documento || "",
+    "N° documento": g.numero_documento || "",
+    Categoría: g.categoria || "",
+    "Costo neto": numberValue(g.neto),
+    "IVA crédito fiscal": numberValue(g.iva),
+    "Total documento": numberValue(g.total),
+    "Método de pago": g.metodo_pago || "",
+    "Estado OCR": g.estado_ocr || "",
+    Observación: g.observacion || ""
+  }));
 }
-function downloadText(name,text){const b=new Blob([text],{type:"text/csv;charset=utf-8"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
-function exportCSV(){downloadText("gastos_junquillar.csv",rowsToCSV(filteredDocs));}
+
+function buildBalanceExportRows() {
+  return getBalanceRows();
+}
+
+/* ── VENTAS TOTALS ─────────────────────────────────────────── */
+
+function getVentasTotals() {
+  const recibidas = (typeof ventasIngresos !== "undefined" ? ventasIngresos : [])
+    .filter(v => String(v.estado || "").toLowerCase() === "recibido");
+
+  const clasificar = v => {
+    const cat = String(v.categoria_contable || "").toLowerCase().trim();
+    if (cat === "aporte") return "aporte";
+    if (cat === "anticipo") return "anticipo";
+    if (cat === "venta propiedad" || cat === "venta") return "venta";
+    if (cat === "otro") return "otro";
+    // fallback: inferir desde concepto
+    const c = String(v.concepto || "").toLowerCase();
+    if (c.includes("aporte")) return "aporte";
+    if (c.includes("anticipo")) return "anticipo";
+    if (c.includes("venta")) return "venta";
+    return "otro";
+  };
+
+  const sum = arr => arr.reduce((a, v) => a + numberValue(v.monto), 0);
+  const aportes  = recibidas.filter(v => clasificar(v) === "aporte");
+  const anticipos = recibidas.filter(v => clasificar(v) === "anticipo");
+  const ventas   = recibidas.filter(v => clasificar(v) === "venta");
+  const otros    = recibidas.filter(v => clasificar(v) === "otro");
+
+  const totalVentasPropiedad = sum(ventas);
+  const totalAnticipos = sum(anticipos);
+
+  // Si hay venta propiedad, los anticipos se consideran aplicados contra la venta
+  // Si no hay venta, los anticipos quedan como no aplicados (pasivo)
+  const anticiposAplicados = totalVentasPropiedad > 0 ? totalAnticipos : 0;
+  const anticiposNoAplicados = totalVentasPropiedad > 0 ? 0 : totalAnticipos;
+
+  return {
+    totalIngresos:         sum(recibidas),
+    totalAportes:          sum(aportes),
+    totalAnticipos:        totalAnticipos,
+    totalAnticiposAplicados: anticiposAplicados,
+    totalAnticiposNoAplicados: anticiposNoAplicados,
+    totalVentasPropiedad:  totalVentasPropiedad,
+    totalOtros:            sum(otros),
+    cantidad:              recibidas.length,
+    cantidadAportes:       aportes.length,
+    cantidadAnticipos:     anticipos.length,
+    cantidadVentas:        ventas.length
+  };
+}
+
+/* ── BALANCE ROWS ──────────────────────────────────────────── */
+
+function getBalanceRows() {
+  const t = getTotals();
+  const v = getVentasTotals();
+
+  const TERRENO       = 100000000;
+  const CAPITAL_SOCIO = 60000000;
+  const modoVendido   = v.totalVentasPropiedad > 0;
+
+  let n = 1;
+  const rows = [];
+
+  const R = (n, sec, cuenta, debe, haber, activo, pasivo, perdida, ganancia) => ({
+    "N°": n, _seccion: sec, Cuenta: cuenta,
+    Debe: debe,   Haber: haber,
+    Deudor: debe, Acreedor: haber,
+    Activo: activo, Pasivo: pasivo,
+    Pérdida: perdida, Ganancia: ganancia
+  });
+
+  if (!modoVendido) {
+    // ── ACTIVOS — modo En ejecución ──
+    // Terreno y Obra son activos capitalizados. IVA es crédito fiscal activo.
+    rows.push(R(n++,"activo","Terreno",             TERRENO,   0, TERRENO,   0, 0, 0));
+    if (t.neto > 0)
+      rows.push(R(n++,"activo","Obra en Curso",     t.neto,    0, t.neto,    0, 0, 0));
+    if (t.iva > 0)
+      rows.push(R(n++,"activo","IVA Crédito Fiscal",t.iva,     0, t.iva,     0, 0, 0));
+
+    // ── PASIVOS — anticipos no aplicados ──
+    if (v.totalAnticiposNoAplicados > 0)
+      rows.push(R(n++,"pasivo","Anticipos recibidos",0, v.totalAnticiposNoAplicados, 0, v.totalAnticiposNoAplicados, 0, 0));
+
+    // ── PATRIMONIO / FINANCIAMIENTO ──
+    rows.push(R(n++,"patrimonio","Capital aportado socio",0, CAPITAL_SOCIO,  0, CAPITAL_SOCIO,  0, 0));
+    if (v.totalAportes > 0)
+      rows.push(R(n++,"patrimonio","Aportes del período",  0, v.totalAportes, 0, v.totalAportes, 0, 0));
+    if (v.totalOtros > 0)
+      rows.push(R(n++,"patrimonio","Otros ingresos",        0, v.totalOtros,   0, v.totalOtros,   0, 0));
+
+    // ── CIERRE — Financiamiento a determinar ──
+    // Cubre la brecha entre inversiones registradas y fuentes de fondos conocidas.
+    const totalInvertido = TERRENO + t.neto + t.iva;
+    const totalFuentes   = v.totalAnticiposNoAplicados + CAPITAL_SOCIO + v.totalAportes + v.totalOtros;
+    const gap = totalInvertido - totalFuentes;
+    if (gap > 1)
+      rows.push(R(n++,"ajuste","Financiamiento a determinar",0, gap, 0, gap, 0, 0));
+    else if (gap < -1)
+      rows.push(R(n++,"ajuste","Ajuste patrimonial",Math.abs(gap), 0, Math.abs(gap), 0, 0, 0));
+
+  } else {
+    // ── modo PROYECTO VENDIDO ──
+
+    // Caja y bancos: saldo neto de efectivo después de todos los flujos conocidos.
+    // Ingresos: Capital socio + Aportes + Venta propiedad (los anticipos ya son parte de la venta).
+    // Egresos:  Terreno + Gastos totales (neto + IVA pagado).
+    const caja = CAPITAL_SOCIO + v.totalAportes + v.totalVentasPropiedad - TERRENO - (t.neto + t.iva);
+    if (caja > 0)
+      rows.push(R(n++,"activo","Caja y bancos",    caja,   0, caja,   0, 0, 0));
+    if (t.iva > 0)
+      rows.push(R(n++,"activo","IVA Crédito Fiscal",t.iva, 0, t.iva,  0, 0, 0));
+
+    // ── PATRIMONIO / FINANCIAMIENTO ──
+    rows.push(R(n++,"patrimonio","Capital aportado socio",0, CAPITAL_SOCIO,  0, CAPITAL_SOCIO,  0, 0));
+    if (v.totalAportes > 0)
+      rows.push(R(n++,"patrimonio","Aportes del período",  0, v.totalAportes, 0, v.totalAportes, 0, 0));
+
+    // Utilidad del proyecto: cierra el balance.
+    // Aparece en columna Pasivo (equity) y en columna Pérdida (cierre del P&L).
+    const utilidad = v.totalVentasPropiedad - TERRENO - t.neto;
+    if (utilidad > 1)
+      rows.push(R(n++,"patrimonio","Utilidad del proyecto",0, 0, 0, utilidad, utilidad, 0));
+    else if (utilidad < -1)
+      rows.push(R(n++,"patrimonio","Pérdida del proyecto", 0, 0, Math.abs(utilidad), 0, 0, Math.abs(utilidad)));
+
+    // ── RESULTADOS — descomposición del P&L ──
+    rows.push(R(n++,"resultado","Ingresos venta propiedad",  0,        v.totalVentasPropiedad, 0, 0, 0,       v.totalVentasPropiedad));
+    rows.push(R(n++,"resultado","Costo terreno (reclasif.)", TERRENO,  0,                      0, 0, TERRENO, 0));
+    if (t.neto > 0)
+      rows.push(R(n++,"resultado","Costo obra vendida",      t.neto,   0,                      0, 0, t.neto,  0));
+  }
+
+  // ── TOTAL ──
+  const totalDebe     = rows.reduce((a, r) => a + numberValue(r.Debe),     0);
+  const totalHaber    = rows.reduce((a, r) => a + numberValue(r.Haber),    0);
+  const totalActivo   = rows.reduce((a, r) => a + numberValue(r.Activo),   0);
+  const totalPasivo   = rows.reduce((a, r) => a + numberValue(r.Pasivo),   0);
+  const totalPerdida  = rows.reduce((a, r) => a + numberValue(r.Pérdida),  0);
+  const totalGanancia = rows.reduce((a, r) => a + numberValue(r.Ganancia), 0);
+
+  rows.push({
+    "N°": "", _seccion:"total", Cuenta:"TOTAL",
+    Debe: totalDebe,    Haber: totalHaber,
+    Deudor: totalDebe,  Acreedor: totalHaber,
+    Activo: totalActivo, Pasivo: totalPasivo,
+    Pérdida: totalPerdida, Ganancia: totalGanancia
+  });
+
+  return rows;
+}
+
+function rowsToCSV(rows) {
+  const h = [
+    "fecha",
+    "proveedor",
+    "rut",
+    "tipo_documento",
+    "numero_documento",
+    "categoria",
+    "neto",
+    "iva",
+    "total",
+    "metodo_pago",
+    "estado_ocr"
+  ];
+
+  const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+
+  return [
+    h.join(";"),
+    ...rows.map(r => h.map(f => esc(r[f])).join(";"))
+  ].join("\n");
+}
+
+function downloadText(name, text) {
+  const b = new Blob([text], { type: "text/csv;charset=utf-8" });
+  const u = URL.createObjectURL(b);
+  const a = document.createElement("a");
+  a.href = u;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(u);
+}
+
+function downloadWorkbook(fileName, sheets) {
+  if (typeof window.XLSX === "undefined") {
+    alert("No se cargó la librería Excel.");
+    return;
+  }
+
+  const wb = window.XLSX.utils.book_new();
+
+  sheets.forEach(sheet => {
+    const ws = window.XLSX.utils.json_to_sheet(sheet.rows);
+    window.XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+  });
+
+  window.XLSX.writeFile(wb, fileName);
+}
+
+function exportCSV() {
+  downloadText("gastos_junquillar.csv", rowsToCSV(filteredDocs));
+}
+
+function exportGastosExcel() {
+  downloadWorkbook("gastos_junquillar.xlsx", [
+    {
+      name: "Gastos",
+      rows: buildGastosExportRows(filteredDocs)
+    }
+  ]);
+}
+
+function exportBalanceExcel() {
+  const sheets = [
+    { name: "Balance",     rows: buildBalanceExportRows() },
+    { name: "Gastos base", rows: buildGastosExportRows(gastos) }
+  ];
+  if (ventasIngresos.length > 0) {
+    sheets.push({
+      name: "Ventas base",
+      rows: ventasIngresos.map(v => ({
+        Fecha:            normalizarFecha(v.fecha),
+        Concepto:         v.concepto || "",
+        "Tipo pago":      v.tipo || "",
+        "Tipo contable":  v.categoria_contable || "",
+        Monto:            numberValue(v.monto),
+        Estado:           v.estado || "",
+        Referencia:       v.referencia || "",
+        Banco:            v.banco || "",
+        Emisor:           v.emisor || ""
+      }))
+    });
+  }
+  downloadWorkbook("balance_junquillar.xlsx", sheets);
+}
+
+function exportReporteExcel() {
+  const t = getTotals();
+
+  const resumen = [
+    { Indicador: "Presupuesto proyecto", Valor: PROJECT_BUDGET },
+    { Indicador: "Ejecutado neto", Valor: t.neto },
+    { Indicador: "IVA crédito fiscal", Valor: t.iva },
+    { Indicador: "Total documentos", Valor: t.total },
+    { Indicador: "Cantidad documentos", Valor: t.docs },
+    { Indicador: "Proveedores", Valor: t.proveedores },
+    { Indicador: "Pendientes OCR", Valor: t.pendientesOcr }
+  ];
+
+  downloadWorkbook("reporte_ejecutivo_junquillar.xlsx", [
+    {
+      name: "Resumen",
+      rows: resumen
+    },
+    {
+      name: "Balance",
+      rows: buildBalanceExportRows()
+    },
+    {
+      name: "Gastos",
+      rows: buildGastosExportRows(gastos)
+    }
+  ]);
+}
 
 /* ── SETUP ────────────────────────────────────────────────── */
 function setupButtons(){
@@ -1066,7 +1763,7 @@ function setupButtons(){
   $("btn-aplicar-filtros-gastos")?.addEventListener("click",applyFilters);
   $("btn-limpiar-filtros-gastos")?.addEventListener("click",clearFilters);
   $("btn-export-csv")?.addEventListener("click",exportCSV);
-  $("btn-export-excel")?.addEventListener("click",exportCSV);
+  $("btn-export-excel")?.addEventListener("click",exportGastosExcel);
   ["filter-text-gastos","global-search"].forEach(id=>$(id)?.addEventListener("input",applyFilters));
   $("modal-overlay")?.addEventListener("click", e => { if(e.target===$("modal-overlay")) closeEditModal(); });
   $("btn-modal-cancel")?.addEventListener("click",closeEditModal);
@@ -1076,25 +1773,224 @@ function setupButtons(){
   $("btn-bulk-cancel")?.addEventListener("click",cancelBulkSelection);
 }
 /* ── VENTAS DATA ─────────────────────────────────────────── */
-const ventasIngresos = [
-  {id:1, fecha:"2024-05-23", concepto:"Aporte mensual — Mayo",          tipo:"Transferencia", monto:5000000,  estado:"Recibido"},
-  {id:2, fecha:"2024-05-10", concepto:"Anticipo Etapa 1 — Estructura",  tipo:"Cheque",        monto:15000000, estado:"Recibido"},
-  {id:3, fecha:"2024-04-28", concepto:"Aporte mensual — Abril",         tipo:"Transferencia", monto:5000000,  estado:"Recibido"},
-  {id:4, fecha:"2024-04-05", concepto:"Anticipo inicial del proyecto",   tipo:"Transferencia", monto:20000000, estado:"Recibido"},
+let ventasIngresos = [
+  {id:1, fecha:"2024-05-23", concepto:"Aporte mensual — Mayo",          tipo:"Transferencia", monto:5000000,  estado:"Recibido", categoria_contable:"Aporte"},
+  {id:2, fecha:"2024-05-10", concepto:"Anticipo Etapa 1 — Estructura",  tipo:"Cheque",        monto:15000000, estado:"Recibido", categoria_contable:"Anticipo"},
+  {id:3, fecha:"2024-04-28", concepto:"Aporte mensual — Abril",         tipo:"Transferencia", monto:5000000,  estado:"Recibido", categoria_contable:"Aporte"},
+  {id:4, fecha:"2024-04-05", concepto:"Anticipo inicial del proyecto",   tipo:"Transferencia", monto:20000000, estado:"Recibido", categoria_contable:"Anticipo"},
 ];
-const ventasCotizaciones = [
+let ventasCotizaciones = [
   {id:1, fecha:"2024-05-20", proveedor:"Constructora XYZ",      descripcion:"Estructura metálica techumbre",  neto:8500000, iva:1615000, total:10115000, estado:"Pendiente"},
   {id:2, fecha:"2024-05-15", proveedor:"Electricistas Ramírez", descripcion:"Instalación eléctrica completa", neto:3200000, iva:608000,  total:3808000,  estado:"Aprobada"},
   {id:3, fecha:"2024-04-30", proveedor:"Gasfitería Central",    descripcion:"Red agua fría y caliente",       neto:2800000, iva:532000,  total:3332000,  estado:"Aprobada"},
   {id:4, fecha:"2024-04-22", proveedor:"Pinturas del Sur SA",   descripcion:"Pintura interior y exterior",    neto:1900000, iva:361000,  total:2261000,  estado:"Rechazada"},
 ];
-const ventasContactos = [
+let ventasContactos = [
   {id:1, nombre:"Christian García B.", rol:"Propietario", telefono:"+56 9 8765 4321", correo:"chgarciablanco@gmail.com", estado:"Activo"},
   {id:2, nombre:"Arq. Patricia López",  rol:"Arquitecto",  telefono:"+56 9 7654 3210", correo:"plopez@arq.cl",            estado:"Activo"},
   {id:3, nombre:"Constructora XYZ",     rol:"Contratista", telefono:"+56 2 2345 6789", correo:"contacto@xyz.cl",          estado:"Activo"},
   {id:4, nombre:"Inspector Municipal",  rol:"Inspector",   telefono:"+56 2 2234 5678", correo:"insp@municipio.cl",        estado:"Activo"},
 ];
 let ventasTab = "ingresos";
+let _editingIngresoId = null;
+let _editingCotId = null;
+let _editingContId = null;
+
+/* ── CRUD INGRESOS ───────────────────────────────────────── */
+function openModalIngreso(id = null) {
+  _editingIngresoId = id;
+  const r = id !== null ? ventasIngresos.find(x => x.id === id) : null;
+  $("modal-ingreso-title").textContent = id !== null ? "✏️ Editar Ingreso" : "✏️ Nuevo Ingreso";
+  $("ing-fecha").value              = r?.fecha              || new Date().toISOString().slice(0, 10);
+  $("ing-concepto").value           = r?.concepto           || "";
+  $("ing-tipo").value               = r?.tipo               || "Transferencia";
+  $("ing-categoria").value          = r?.categoria_contable || "Aporte";
+  $("ing-monto").value              = r?.monto              || "";
+  $("ing-estado").value             = r?.estado             || "Recibido";
+  $("ing-referencia").value         = r?.referencia         || "";
+  $("ing-banco").value              = r?.banco              || "";
+  $("ing-cuenta").value             = r?.cuenta             || "";
+  $("ing-emisor").value             = r?.emisor             || "";
+  $("ing-obs").value                = r?.obs                || "";
+  $("modal-ingreso").classList.remove("modal-hidden");
+}
+function closeModalIngreso() {
+  $("modal-ingreso").classList.add("modal-hidden");
+  _editingIngresoId = null;
+}
+function saveIngreso() {
+  const fecha    = $("ing-fecha").value;
+  const concepto = ($("ing-concepto").value || "").trim();
+  const monto    = Number($("ing-monto").value) || 0;
+  if (!concepto || !fecha) { showToast("⚠️ Completa fecha y concepto."); return; }
+  const entry = {
+    fecha, concepto,
+    tipo:               $("ing-tipo").value,
+    categoria_contable: $("ing-categoria").value,
+    monto,
+    estado:     $("ing-estado").value,
+    referencia: ($("ing-referencia").value || "").trim(),
+    banco:      ($("ing-banco").value      || "").trim(),
+    cuenta:     ($("ing-cuenta").value     || "").trim(),
+    emisor:     ($("ing-emisor").value     || "").trim(),
+    obs:        ($("ing-obs").value        || "").trim(),
+  };
+  if (_editingIngresoId !== null) {
+    const idx = ventasIngresos.findIndex(x => x.id === _editingIngresoId);
+    if (idx >= 0) ventasIngresos[idx] = { ...ventasIngresos[idx], ...entry };
+    showToast("✓ Ingreso actualizado");
+  } else {
+    const newId = Math.max(0, ...ventasIngresos.map(x => x.id)) + 1;
+    ventasIngresos.unshift({ id: newId, ...entry });
+    showToast("✓ Ingreso agregado");
+  }
+  closeModalIngreso();
+  renderVentas();
+  renderKPIs();
+}
+function deleteIngreso(id) {
+  const r = ventasIngresos.find(x => x.id === id);
+  if (!r || !confirm(`¿Eliminar el ingreso "${r.concepto}"?\nEsta acción no se puede deshacer.`)) return;
+  ventasIngresos = ventasIngresos.filter(x => x.id !== id);
+  renderVentas(); renderKPIs();
+  showToast("✓ Ingreso eliminado");
+}
+
+/* ── CRUD COTIZACIONES ───────────────────────────────────── */
+function calcCotIva() {
+  const neto = Number($("cot-neto").value) || 0;
+  const iva = Math.round(neto * 0.19);
+  $("cot-iva").value   = iva;
+  $("cot-total").value = neto + iva;
+}
+function calcCotTotal() {
+  const neto = Number($("cot-neto").value) || 0;
+  const iva  = Number($("cot-iva").value)  || 0;
+  $("cot-total").value = neto + iva;
+}
+function openModalCotizacion(id = null) {
+  _editingCotId = id;
+  const r = id !== null ? ventasCotizaciones.find(x => x.id === id) : null;
+  $("modal-cot-title").textContent = id !== null ? "✏️ Editar Cotización" : "✏️ Nueva Cotización";
+  $("cot-proveedor").value  = r?.proveedor  || "";
+  $("cot-rut").value        = r?.rut        || "";
+  $("cot-telefono").value   = r?.telefono   || "";
+  $("cot-correo").value     = r?.correo     || "";
+  $("cot-numero").value     = r?.numero     || "";
+  $("cot-fecha").value      = r?.fecha      || new Date().toISOString().slice(0, 10);
+  $("cot-vigencia").value   = r?.vigencia   || "";
+  $("cot-categoria").value  = r?.categoria  || "";
+  $("cot-descripcion").value= r?.descripcion|| "";
+  $("cot-neto").value       = r?.neto       || "";
+  $("cot-iva").value        = r?.iva        || "";
+  $("cot-total").value      = r?.total      || "";
+  $("cot-estado").value     = r?.estado     || "Pendiente";
+  $("cot-obs").value        = r?.obs        || "";
+  $("modal-cotizacion").classList.remove("modal-hidden");
+}
+function closeModalCotizacion() {
+  $("modal-cotizacion").classList.add("modal-hidden");
+  _editingCotId = null;
+}
+function saveCotizacion() {
+  const proveedor = ($("cot-proveedor").value || "").trim();
+  const fecha     = $("cot-fecha").value;
+  if (!proveedor || !fecha) { showToast("⚠️ Completa fecha y proveedor."); return; }
+  const neto  = Number($("cot-neto").value)  || 0;
+  const iva   = Number($("cot-iva").value)   || 0;
+  const total = Number($("cot-total").value) || neto + iva;
+  const entry = {
+    fecha, proveedor,
+    rut:         ($("cot-rut").value         || "").trim(),
+    telefono:    ($("cot-telefono").value    || "").trim(),
+    correo:      ($("cot-correo").value      || "").trim(),
+    numero:      ($("cot-numero").value      || "").trim(),
+    vigencia:    $("cot-vigencia").value     || "",
+    categoria:   $("cot-categoria").value    || "",
+    descripcion: ($("cot-descripcion").value || "").trim(),
+    neto, iva, total,
+    estado:      $("cot-estado").value,
+    obs:         ($("cot-obs").value         || "").trim(),
+  };
+  if (_editingCotId !== null) {
+    const idx = ventasCotizaciones.findIndex(x => x.id === _editingCotId);
+    if (idx >= 0) ventasCotizaciones[idx] = { ...ventasCotizaciones[idx], ...entry };
+    showToast("✓ Cotización actualizada");
+  } else {
+    const newId = Math.max(0, ...ventasCotizaciones.map(x => x.id)) + 1;
+    ventasCotizaciones.unshift({ id: newId, ...entry });
+    showToast("✓ Cotización agregada");
+  }
+  closeModalCotizacion();
+  renderVentas();
+}
+function deleteCotizacion(id) {
+  const r = ventasCotizaciones.find(x => x.id === id);
+  if (!r || !confirm(`¿Eliminar la cotización de "${r.proveedor}"?\nEsta acción no se puede deshacer.`)) return;
+  ventasCotizaciones = ventasCotizaciones.filter(x => x.id !== id);
+  renderVentas();
+  showToast("✓ Cotización eliminada");
+}
+
+/* ── CRUD CONTACTOS ──────────────────────────────────────── */
+function openModalContacto(id = null) {
+  _editingContId = id;
+  const r = id !== null ? ventasContactos.find(x => x.id === id) : null;
+  $("modal-cont-title").textContent = id !== null ? "✏️ Editar Contacto" : "✏️ Nuevo Contacto";
+  $("cont-nombre").value       = r?.nombre       || "";
+  $("cont-rut").value          = r?.rut          || "";
+  $("cont-empresa").value      = r?.empresa      || "";
+  $("cont-rol").value          = r?.rol          || "";
+  $("cont-especialidad").value = r?.especialidad || "";
+  $("cont-estado").value       = r?.estado       || "Activo";
+  $("cont-telefono").value     = r?.telefono     || "";
+  $("cont-telefono2").value    = r?.telefono2    || "";
+  $("cont-correo").value       = r?.correo       || "";
+  $("cont-correo2").value      = r?.correo2      || "";
+  $("cont-direccion").value    = r?.direccion    || "";
+  $("cont-obs").value          = r?.obs          || "";
+  $("modal-contacto").classList.remove("modal-hidden");
+}
+function closeModalContacto() {
+  $("modal-contacto").classList.add("modal-hidden");
+  _editingContId = null;
+}
+function saveContacto() {
+  const nombre = ($("cont-nombre").value || "").trim();
+  if (!nombre) { showToast("⚠️ Ingresa el nombre del contacto."); return; }
+  const entry = {
+    nombre,
+    rut:          ($("cont-rut").value          || "").trim(),
+    empresa:      ($("cont-empresa").value      || "").trim(),
+    rol:          ($("cont-rol").value          || "").trim(),
+    especialidad: ($("cont-especialidad").value || "").trim(),
+    estado:       $("cont-estado").value,
+    telefono:     ($("cont-telefono").value     || "").trim(),
+    telefono2:    ($("cont-telefono2").value    || "").trim(),
+    correo:       ($("cont-correo").value       || "").trim(),
+    correo2:      ($("cont-correo2").value      || "").trim(),
+    direccion:    ($("cont-direccion").value    || "").trim(),
+    obs:          ($("cont-obs").value          || "").trim(),
+  };
+  if (_editingContId !== null) {
+    const idx = ventasContactos.findIndex(x => x.id === _editingContId);
+    if (idx >= 0) ventasContactos[idx] = { ...ventasContactos[idx], ...entry };
+    showToast("✓ Contacto actualizado");
+  } else {
+    const newId = Math.max(0, ...ventasContactos.map(x => x.id)) + 1;
+    ventasContactos.unshift({ id: newId, ...entry });
+    showToast("✓ Contacto agregado");
+  }
+  closeModalContacto();
+  renderVentas();
+}
+function deleteContacto(id) {
+  const r = ventasContactos.find(x => x.id === id);
+  if (!r || !confirm(`¿Eliminar el contacto "${r.nombre}"?\nEsta acción no se puede deshacer.`)) return;
+  ventasContactos = ventasContactos.filter(x => x.id !== id);
+  renderVentas();
+  showToast("✓ Contacto eliminado");
+}
 
 /* ── INSUMOS DATA ────────────────────────────────────────── */
 const insumosData = [
@@ -1117,7 +2013,7 @@ function renderVentas(){
   const el = $("ventas-root");
   if(!el) return;
   const badge = e => {
-    const m = {Recibido:{bg:"var(--green-soft)",c:"var(--green)"},Pendiente:{bg:"var(--amber-soft)",c:"var(--amber)"},Aprobada:{bg:"var(--green-soft)",c:"var(--green)"},Rechazada:{bg:"var(--red-soft)",c:"var(--red)"},Activo:{bg:"var(--green-soft)",c:"var(--green)"}};
+    const m = {Recibido:{bg:"var(--green-soft)",c:"var(--green)"},Pendiente:{bg:"var(--amber-soft)",c:"var(--amber)"},Aprobada:{bg:"var(--green-soft)",c:"var(--green)"},Rechazada:{bg:"var(--red-soft)",c:"var(--red)"},Activo:{bg:"var(--green-soft)",c:"var(--green)"},Inactivo:{bg:"#f8fafc",c:"var(--muted)"}};
     const s = m[e]||{bg:"#f8fafc",c:"var(--muted)"};
     return `<span class="jv-badge" style="background:${s.bg};color:${s.c}">${e}</span>`;
   };
@@ -1129,35 +2025,88 @@ function renderVentas(){
   let content = "";
   if(ventasTab === "ingresos"){
     const total = ventasIngresos.reduce((a,r)=>a+r.monto,0);
+    const recibidos = ventasIngresos.filter(r=>r.estado==="Recibido");
+    const totalRec = recibidos.reduce((a,r)=>a+r.monto,0);
     content = `<div class="kpi-grid" style="margin-bottom:20px">
-      <div class="kpi-card"><div class="kpi-title">Total ingresos</div><div class="kpi-value">${formatoCLP(total)}</div><div class="kpi-footer">${ventasIngresos.length} aportes</div></div>
-      <div class="kpi-card"><div class="kpi-title">Recibidos</div><div class="kpi-value">${ventasIngresos.filter(r=>r.estado==="Recibido").length}</div><div class="kpi-footer">Confirmados</div></div>
-      <div class="kpi-card"><div class="kpi-title">Último ingreso</div><div class="kpi-value">${normalizarFecha(ventasIngresos[0]?.fecha)}</div><div class="kpi-footer">Más reciente</div></div>
-      <div class="kpi-card"><div class="kpi-title">Promedio por aporte</div><div class="kpi-value">${formatoCLP(total/ventasIngresos.length)}</div><div class="kpi-footer">Calculado</div></div>
+      <div class="kpi-card"><div class="kpi-title">Total ingresos</div><div class="kpi-value">${formatoCLP(total)}</div><div class="kpi-footer">${ventasIngresos.length} registro${ventasIngresos.length!==1?"s":""}</div></div>
+      <div class="kpi-card"><div class="kpi-title">Monto recibido</div><div class="kpi-value">${formatoCLP(totalRec)}</div><div class="kpi-footer">${recibidos.length} confirmado${recibidos.length!==1?"s":""}</div></div>
+      <div class="kpi-card"><div class="kpi-title">Último ingreso</div><div class="kpi-value">${normalizarFecha(ventasIngresos[0]?.fecha||"")}</div><div class="kpi-footer">Más reciente</div></div>
+      <div class="kpi-card"><div class="kpi-title">Pendientes</div><div class="kpi-value">${ventasIngresos.filter(r=>r.estado==="Pendiente").length}</div><div class="kpi-footer">Por confirmar</div></div>
     </div>
-    <div class="card"><div class="card-title">Registro de aportes e ingresos</div>
-      <div class="table-wrap"><div class="table-head jv-ing-head"><div>Fecha</div><div>Concepto</div><div>Tipo</div><div style="text-align:right">Monto</div><div>Estado</div></div>
-      <div>${ventasIngresos.map(r=>`<div class="table-row jv-ing-row"><div>${normalizarFecha(r.fecha)}</div><div class="doc-name">${r.concepto}</div><div style="font-size:12px;color:var(--muted)">${r.tipo}</div><div style="text-align:right;font-weight:600">${formatoCLP(r.monto)}</div><div>${badge(r.estado)}</div></div>`).join("")}</div>
-    </div></div>`;
+    <div class="card">
+      <div class="card-header-row">
+        <div><div class="card-title">Registro de aportes e ingresos</div></div>
+        <button class="jv-nuevo-btn" onclick="openModalIngreso()">+ Nuevo ingreso</button>
+      </div>
+      <div class="table-wrap" style="margin-top:14px">
+        <div class="table-head jv-ing-head"><div>Fecha</div><div>Concepto</div><div>Tipo</div><div style="text-align:right">Monto</div><div>Estado</div><div>Acc.</div></div>
+        <div>${ventasIngresos.length ? ventasIngresos.map(r=>`<div class="table-row jv-ing-row">
+          <div>${normalizarFecha(r.fecha)}</div>
+          <div class="doc-name">${r.concepto}</div>
+          <div style="font-size:12px;color:var(--muted)">${r.tipo}</div>
+          <div style="text-align:right;font-weight:600">${formatoCLP(r.monto)}</div>
+          <div>${badge(r.estado)}</div>
+          <div class="doc-actions">
+            <button class="action-btn" title="Editar" onclick="openModalIngreso(${r.id})">✏️</button>
+            <button class="action-btn" title="Eliminar" onclick="deleteIngreso(${r.id})">🗑️</button>
+          </div>
+        </div>`).join("") : emptyState("Sin ingresos registrados.")}</div>
+      </div>
+    </div>`;
   }
   if(ventasTab === "cotizaciones"){
     const aprobadas = ventasCotizaciones.filter(c=>c.estado==="Aprobada");
+    const tasa = ventasCotizaciones.length ? Math.round(aprobadas.length/ventasCotizaciones.length*100) : 0;
     content = `<div class="kpi-grid" style="margin-bottom:20px">
       <div class="kpi-card"><div class="kpi-title">Total cotizaciones</div><div class="kpi-value">${ventasCotizaciones.length}</div><div class="kpi-footer">Registradas</div></div>
-      <div class="kpi-card"><div class="kpi-title">Aprobadas</div><div class="kpi-value">${aprobadas.length}</div><div class="kpi-footer">Tasa ${Math.round(aprobadas.length/ventasCotizaciones.length*100)}%</div></div>
+      <div class="kpi-card"><div class="kpi-title">Aprobadas</div><div class="kpi-value">${aprobadas.length}</div><div class="kpi-footer">Tasa ${tasa}%</div></div>
       <div class="kpi-card"><div class="kpi-title">Monto aprobado</div><div class="kpi-value">${formatoCLP(aprobadas.reduce((a,c)=>a+c.total,0))}</div><div class="kpi-footer">Neto + IVA</div></div>
       <div class="kpi-card"><div class="kpi-title">Pendientes</div><div class="kpi-value">${ventasCotizaciones.filter(c=>c.estado==="Pendiente").length}</div><div class="kpi-footer">Por revisar</div></div>
     </div>
-    <div class="card"><div class="card-title">Cotizaciones de contratistas</div>
-      <div class="table-wrap"><div class="table-head jv-cot-head"><div>Fecha</div><div>Proveedor</div><div>Descripción</div><div style="text-align:right">Neto</div><div style="text-align:right">IVA</div><div style="text-align:right">Total</div><div>Estado</div></div>
-      <div>${ventasCotizaciones.map(c=>`<div class="table-row jv-cot-row"><div>${normalizarFecha(c.fecha)}</div><div class="doc-name">${c.proveedor}</div><div style="font-size:12px;color:var(--muted)">${c.descripcion}</div><div style="text-align:right">${formatoCLP(c.neto)}</div><div style="text-align:right">${formatoCLP(c.iva)}</div><div style="text-align:right;font-weight:600">${formatoCLP(c.total)}</div><div>${badge(c.estado)}</div></div>`).join("")}</div>
-    </div></div>`;
+    <div class="card">
+      <div class="card-header-row">
+        <div><div class="card-title">Cotizaciones de contratistas</div></div>
+        <button class="jv-nuevo-btn" onclick="openModalCotizacion()">+ Nueva cotización</button>
+      </div>
+      <div class="table-wrap" style="margin-top:14px">
+        <div class="table-head jv-cot-head"><div>Fecha</div><div>Proveedor</div><div>Descripción</div><div style="text-align:right">Neto</div><div style="text-align:right">IVA</div><div style="text-align:right">Total</div><div>Estado</div><div>Acc.</div></div>
+        <div>${ventasCotizaciones.length ? ventasCotizaciones.map(c=>`<div class="table-row jv-cot-row">
+          <div>${normalizarFecha(c.fecha)}</div>
+          <div class="doc-name">${c.proveedor}</div>
+          <div style="font-size:12px;color:var(--muted)">${c.descripcion}</div>
+          <div style="text-align:right">${formatoCLP(c.neto)}</div>
+          <div style="text-align:right">${formatoCLP(c.iva)}</div>
+          <div style="text-align:right;font-weight:600">${formatoCLP(c.total)}</div>
+          <div>${badge(c.estado)}</div>
+          <div class="doc-actions">
+            <button class="action-btn" title="Editar" onclick="openModalCotizacion(${c.id})">✏️</button>
+            <button class="action-btn" title="Eliminar" onclick="deleteCotizacion(${c.id})">🗑️</button>
+          </div>
+        </div>`).join("") : emptyState("Sin cotizaciones registradas.")}</div>
+      </div>
+    </div>`;
   }
   if(ventasTab === "contactos"){
-    content = `<div class="card"><div class="card-title">Contactos del proyecto</div><div class="card-sub">${ventasContactos.length} personas y organizaciones vinculadas</div>
-      <div class="table-wrap" style="margin-top:14px"><div class="table-head jv-cont-head"><div>Nombre</div><div>Rol</div><div>Teléfono</div><div>Correo</div><div>Estado</div></div>
-      <div>${ventasContactos.map(c=>`<div class="table-row jv-cont-row"><div class="doc-name">${c.nombre}</div><div><span class="jv-badge" style="background:var(--sky-soft);color:var(--sky)">${c.rol}</span></div><div style="font-size:12px">${c.telefono}</div><div style="font-size:12px;color:var(--muted)">${c.correo}</div><div>${badge(c.estado)}</div></div>`).join("")}</div>
-    </div></div>`;
+    content = `<div class="card">
+      <div class="card-header-row">
+        <div><div class="card-title">Contactos del proyecto</div><div class="card-sub">${ventasContactos.length} personas y organizaciones vinculadas</div></div>
+        <button class="jv-nuevo-btn" onclick="openModalContacto()">+ Nuevo contacto</button>
+      </div>
+      <div class="table-wrap" style="margin-top:14px">
+        <div class="table-head jv-cont-head"><div>Nombre</div><div>Rol</div><div>Teléfono</div><div>Correo</div><div>Estado</div><div>Acc.</div></div>
+        <div>${ventasContactos.length ? ventasContactos.map(c=>`<div class="table-row jv-cont-row">
+          <div class="doc-name">${c.nombre}</div>
+          <div><span class="jv-badge" style="background:var(--sky-soft);color:var(--sky)">${c.rol}</span></div>
+          <div style="font-size:12px">${c.telefono}</div>
+          <div style="font-size:12px;color:var(--muted)">${c.correo}</div>
+          <div>${badge(c.estado)}</div>
+          <div class="doc-actions">
+            <button class="action-btn" title="Editar" onclick="openModalContacto(${c.id})">✏️</button>
+            <button class="action-btn" title="Eliminar" onclick="deleteContacto(${c.id})">🗑️</button>
+          </div>
+        </div>`).join("") : emptyState("Sin contactos registrados.")}</div>
+      </div>
+    </div>`;
   }
   el.innerHTML = tabBar + content;
 }
@@ -1356,12 +2305,55 @@ function initDashboard(){setupNavigation();setupFileUpload();setupButtons();upda
 document.addEventListener("DOMContentLoaded",initDashboard);
 
 /* ── Exponer funciones al scope global (necesario para onclick inline) ── */
-window.openEditModal   = openEditModal;
-window.closeEditModal  = closeEditModal;
-window.confirmDelete   = confirmDelete;
-window.setVentasTab    = setVentasTab;
-window.showToast       = showToast;
-window.cfg2AddTag      = cfg2AddTag;
-window.cfg2SetTheme    = cfg2SetTheme;
-window.cfg2SetColor    = cfg2SetColor;
-window.toggleRowSelect = toggleRowSelect;
+window.openEditModal      = openEditModal;
+window.closeEditModal     = closeEditModal;
+window.confirmDelete      = confirmDelete;
+window.setVentasTab       = setVentasTab;
+window.showToast          = showToast;
+window.cfg2AddTag         = cfg2AddTag;
+window.cfg2SetTheme       = cfg2SetTheme;
+window.cfg2SetColor       = cfg2SetColor;
+window.toggleRowSelect    = toggleRowSelect;
+// CRUD Ingresos
+window.openModalIngreso   = openModalIngreso;
+window.closeModalIngreso  = closeModalIngreso;
+window.saveIngreso        = saveIngreso;
+window.deleteIngreso      = deleteIngreso;
+// CRUD Cotizaciones
+window.openModalCotizacion  = openModalCotizacion;
+window.closeModalCotizacion = closeModalCotizacion;
+window.saveCotizacion       = saveCotizacion;
+window.deleteCotizacion     = deleteCotizacion;
+window.calcCotIva           = calcCotIva;
+window.calcCotTotal         = calcCotTotal;
+// CRUD Contactos
+window.openModalContacto  = openModalContacto;
+window.closeModalContacto = closeModalContacto;
+window.saveContacto       = saveContacto;
+window.deleteContacto     = deleteContacto;
+// Control de Caja
+window.openModalAbrirCaja  = openModalAbrirCaja;
+window.closeModalAbrirCaja = closeModalAbrirCaja;
+window.guardarAperturaCaja = guardarAperturaCaja;
+window.openModalCerrarCaja  = openModalCerrarCaja;
+window.closeModalCerrarCaja = closeModalCerrarCaja;
+window.guardarCierreCaja    = guardarCierreCaja;
+window.resetCaja            = resetCaja;
+
+window.exportToExcel = exportReporteExcel;
+window.exportBalanceExcel = exportBalanceExcel;
+
+window.exportToPDF = function () {
+  window.print();
+};
+
+window.toggleDetalle = function () {
+  const el = document.getElementById("report-extras");
+  if (!el) return;
+  el.style.display = el.style.display === "none" ? "block" : "none";
+};
+
+
+
+
+
